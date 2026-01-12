@@ -21,6 +21,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".PrivacyActivity" />
+        <activity android:name=".AboutActivity" android:screenOrientation="portrait"/>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

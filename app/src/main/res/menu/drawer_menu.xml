@@ -15,10 +15,17 @@
             <item
                 android:id="@+id/nav_currency"
                 android:title="Change Currency"
-                android:icon="@drawable/ic_nav_currency" /> <item
-            android:id="@+id/nav_privacy"
-            android:title="Privacy Policy"
-            android:icon="@drawable/ic_nav_privacy" /> </menu>
+                android:icon="@drawable/ic_nav_currency" />
+            <item
+                android:id="@+id/nav_privacy"
+                android:title="Privacy Policy"
+                android:icon="@drawable/ic_nav_privacy" />
+
+            <item
+                android:id="@+id/nav_about"
+                android:title="About Us"
+                android:icon="@drawable/ic_nav_about" />
+        </menu>
     </item>
 
 </menu>

@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_import -> importLauncher.launch("text/*")
                 R.id.nav_currency -> showCurrencySelector(isFirstLaunch = false)
                 R.id.nav_privacy -> startActivity(android.content.Intent(this, PrivacyActivity::class.java))
+                R.id.nav_about -> startActivity(android.content.Intent(this, AboutActivity::class.java))
             }
             true
         }
