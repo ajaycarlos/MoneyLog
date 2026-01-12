@@ -5,24 +5,20 @@
         <item
             android:id="@+id/nav_export"
             android:title="Export Backup"
-            android:icon="@android:drawable/ic_menu_save" />
-        <item
-            android:id="@+id/nav_import"
-            android:title="Import / Restore"
-            android:icon="@android:drawable/ic_menu_upload" />
-    </group>
+            android:icon="@drawable/ic_nav_export" /> <item
+        android:id="@+id/nav_import"
+        android:title="Import / Restore"
+        android:icon="@drawable/ic_nav_import" /> </group>
 
     <item android:title="Settings">
         <menu>
             <item
                 android:id="@+id/nav_currency"
                 android:title="Change Currency"
-                android:icon="@android:drawable/ic_menu_manage" />
-            <item
-                android:id="@+id/nav_privacy"
-                android:title="Privacy Policy"
-                android:icon="@android:drawable/ic_menu_info_details" />
-        </menu>
+                android:icon="@drawable/ic_nav_currency" /> <item
+            android:id="@+id/nav_privacy"
+            android:title="Privacy Policy"
+            android:icon="@drawable/ic_nav_privacy" /> </menu>
     </item>
 
 </menu>
