@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_export"
+            android:title="Export Backup (CSV/TXT)"
+            android:icon="@android:drawable/ic_menu_save" />
+        <item
+            android:id="@+id/nav_import"
+            android:title="Import / Restore"
+            android:icon="@android:drawable/ic_menu_upload" />
+    </group>
+
+    <item android:title="Settings">
+        <menu>
+            <item
+                android:id="@+id/nav_currency"
+                android:title="Change Currency"
+                android:icon="@android:drawable/ic_menu_manage" />
+            <item
+                android:id="@+id/nav_privacy"
+                android:title="Privacy Policy"
+                android:icon="@android:drawable/ic_menu_info_details" />
+        </menu>
+    </item>
+</menu>

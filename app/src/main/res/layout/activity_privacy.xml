@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Privacy Policy"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp"
+            android:textColor="#000000"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:lineSpacingExtra="4dp"
+            android:text="1. Data Collection\nThis app does NOT collect, transmit, or share any user data. All data (transactions and logs) is stored 100% locally on your specific device.\n\n2. Internet Usage\nThis app does not use the Internet. It functions completely offline.\n\n3. Third-Party Services\nNo third-party analytics, tracking, or advertising SDKs are present in this application.\n\n4. Data Security\nYour financial logs are stored in a secure local database (SQLite/Room) on your phone. If you uninstall the app, this data is permanently deleted by the Android OS.\n\n5. Contact\nSince we do not collect data, we do not have access to your personal information." />
+
+        <Button
+            android:id="@+id/btnClose"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Close"
+            android:layout_marginTop="24dp"/>
+
+    </LinearLayout>
+</ScrollView>
