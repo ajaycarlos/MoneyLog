@@ -317,7 +317,8 @@ class MainActivity : AppCompatActivity() {
 
                 val parts = text.split(" ", limit = 2)
                 val mathPart = parts[0]
-                val descPart = if (parts.size > 1) parts[1] else ""
+                // Added .replaceFirstChar { it.uppercase() } to capitalize the description
+                val descPart = if (parts.size > 1) parts[1].replaceFirstChar { it.uppercase() } else ""
 
                 val mathResult = evaluateMath(mathPart)
                 val amount = mathResult ?: mathPart.toDoubleOrNull() ?: 0.0
@@ -348,7 +349,8 @@ class MainActivity : AppCompatActivity() {
 
         val split = rawText.split(" ", limit = 2)
         val mathPart = split[0]
-        val desc = if (split.size > 1) split[1] else "General"
+        // Added .replaceFirstChar { it.uppercase() } here too
+        val desc = if (split.size > 1) split[1].replaceFirstChar { it.uppercase() } else "General"
 
         val evaluatedAmount = evaluateMath(mathPart)
 
