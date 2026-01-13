@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.moneylog"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0-Bronze"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -31,6 +31,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
