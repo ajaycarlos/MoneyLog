@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.moneylog"
+        applicationId = "com.ajaydev.moneylog"
         minSdk = 24
         targetSdk = 36
         versionCode = 2
