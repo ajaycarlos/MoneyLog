@@ -200,7 +200,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:background="@drawable/bg_message_card"
-                android:hint="Type here..."
+                android:hint="Try '+7000 Freelance Gigs'"
                 android:inputType="textCapSentences|textMultiLine"
                 android:completionThreshold="1"
                 android:maxLines="4"

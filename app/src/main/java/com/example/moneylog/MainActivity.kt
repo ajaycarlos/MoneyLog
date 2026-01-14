@@ -173,7 +173,7 @@ class MainActivity : AppCompatActivity() {
 
                 // --- 2. UX HINT LOGIC ---
                 if (text.isEmpty()) {
-                    binding.etInput.hint = "Type: -50 coffee"
+                    binding.etInput.hint = "Try '-50 coffee'"
                 } else if (isTransactionStart && !hasSpace) {
                     // Phase 1 Hint
                     binding.etInput.hint = "Amount (supports + - * /)"
