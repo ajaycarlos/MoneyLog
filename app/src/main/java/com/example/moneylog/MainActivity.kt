@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnSend.setOnClickListener { handleInput() }
         binding.btnMenu.setOnClickListener { binding.drawerLayout.openDrawer(GravityCompat.START) }
         binding.cardBalance.setOnClickListener { showSummarySheet() }
+        binding.btnCancelEdit.setOnClickListener { resetInput() } // Clicking X cancels edit
 
         binding.navView.setNavigationItemSelectedListener { menuItem ->
             binding.drawerLayout.closeDrawer(GravityCompat.START)
@@ -578,10 +579,28 @@ class MainActivity : AppCompatActivity() {
             }
             .show()
     }
-    private fun startEditing(transaction: Transaction) { editingTransaction = transaction; binding.etInput.setText(transaction.originalText); binding.etInput.setSelection(transaction.originalText.length); binding.btnSend.background.setTint(android.graphics.Color.parseColor("#FF9800")); binding.etInput.requestFocus() }
+    private fun startEditing(transaction: Transaction) {
+        editingTransaction = transaction
+        binding.etInput.setText(transaction.originalText)
+        binding.etInput.setSelection(transaction.originalText.length)
+        binding.btnSend.background.setTint(android.graphics.Color.parseColor("#FF9800"))
+
+        // NEW LINE: Show the cancel button
+        binding.btnCancelEdit.visibility = View.VISIBLE
+
+        binding.etInput.requestFocus()
+    }
     private fun updateTransaction(original: String, amount: Double, desc: String) { val current = editingTransaction ?: return; lifecycleScope.launch(Dispatchers.IO) { val updated = current.copy(originalText = original, amount = amount, description = desc); db.transactionDao().update(updated); withContext(Dispatchers.Main) { resetInput(); loadData(); showError("Updated") } } }
     private fun saveTransaction(original: String, amount: Double, desc: String) { lifecycleScope.launch(Dispatchers.IO) { val transaction = Transaction(originalText = original, amount = amount, description = desc, timestamp = System.currentTimeMillis()); db.transactionDao().insert(transaction); withContext(Dispatchers.Main) { resetInput(); loadData(); binding.rvTransactions.scrollToPosition(0) } } }
-    private fun resetInput() { binding.etInput.text.clear(); binding.btnSend.isEnabled = true; binding.btnSend.background.setTint(android.graphics.Color.parseColor("#004D40")); editingTransaction = null }
+    private fun resetInput() {
+        binding.etInput.text.clear()
+        binding.btnSend.isEnabled = true
+        binding.btnSend.background.setTint(android.graphics.Color.parseColor("#004D40"))
+        editingTransaction = null
+
+        // NEW LINE: Hide the cancel button
+        binding.btnCancelEdit.visibility = View.GONE
+    }
     private fun confirmDelete(transaction: Transaction) {
         MaterialAlertDialogBuilder(this)
             .setTitle("Delete?")
