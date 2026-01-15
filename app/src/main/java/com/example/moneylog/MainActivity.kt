@@ -55,6 +55,11 @@ class MainActivity : AppCompatActivity() {
         binding.rvTransactions.layoutManager = LinearLayoutManager(this)
         binding.rvTransactions.adapter = adapter
 
+        // Setup Pull-to-Refresh
+        binding.swipeRefresh.setOnRefreshListener {
+            runSync()
+        }
+
         if (!CurrencyHelper.isCurrencySet(this)) {
             showCurrencySelector(isFirstLaunch = true)
         } else {
@@ -658,14 +663,16 @@ class MainActivity : AppCompatActivity() {
     }
     private fun runSync() {
         syncManager.syncData { message ->
-            // Only show message if it's an Error (like 101 busy) or if actual data was synced.
-            // We stay silent if it just says "Up to date" to not annoy the user.
+            // 1. Show message if needed
             if (message.contains("Error") || message.contains("Synced")) {
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
                 if (message.contains("Synced")) {
-                    loadData() // Refresh list if new data came in
+                    loadData()
                 }
             }
+
+            // 2. STOP the spinning animation (Crucial!)
+            binding.swipeRefresh.isRefreshing = false
         }
     }
     private fun deleteTransaction(transaction: Transaction) {
