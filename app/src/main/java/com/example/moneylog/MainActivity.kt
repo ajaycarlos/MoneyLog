@@ -670,6 +670,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun deleteTransaction(transaction: Transaction) {
         lifecycleScope.launch(Dispatchers.IO) {
+            syncManager.pushDelete(transaction)
             db.transactionDao().delete(transaction)
             withContext(Dispatchers.Main) {
                 loadData()
