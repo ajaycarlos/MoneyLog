@@ -1,3 +1,42 @@
 <resources>
     <string name="app_name">JotPay</string>
+
+    <string name="privacy_policy_full">
+PRIVACY POLICY &amp; TERMS OF SERVICE
+\n\n
+Last Updated: January 2026
+\n\n
+1. INTRODUCTION\n
+Welcome to JotPay ("we," "our," or "us"). We are committed to protecting your privacy and ensuring the security of your financial data. This Privacy Policy explains how your information is collected, used, and stored when you use the JotPay mobile application.
+\n\n
+2. DATA COLLECTION AND STORAGE\n
+\n
+2.1. Local-First Architecture\n
+JotPay operates on a "Local-First" basis. Your financial transaction logs, descriptions, and amounts are stored locally on your device\'s internal storage in a secure SQL database. We do not have access to this local database.
+\n\n
+2.2. Cloud Synchronization (Optional)\n
+If you choose to use the "Link Device" feature, your data will be synchronized using Google Firebase Realtime Database.
+\n
+• Encryption: All data is encrypted using AES-128 standard on your device BEFORE it is transmitted. The cloud server receives and stores only encrypted strings.\n
+• Keys: The decryption keys are generated and stored solely on your devices. We cannot decrypt or view your financial data.\n
+• Retention: Data on the cloud serves strictly as a synchronization relay.
+\n\n
+3. PERMISSIONS\n
+We request the minimum permissions necessary for functionality:\n
+• CAMERA: Required strictly for scanning QR codes to link devices. No images are saved or transmitted.\n
+• INTERNET: Required to synchronize encrypted data between your linked devices.
+\n\n
+4. DATA OWNERSHIP AND EXPORT\n
+You retain full ownership of your data. The application provides built-in tools to export your transaction history to CSV (Excel) or Text formats at any time. You may delete your data by clearing the application storage or uninstalling the application.
+\n\n
+5. THIRD-PARTY SERVICES\n
+We use Google Firebase solely for infrastructure purposes (database and hosting). We do not use third-party analytics, ad networks, or tracking pixels.
+\n\n
+6. CHANGES TO THIS POLICY\n
+We may update our Privacy Policy from time to time. You are advised to review this page periodically for any changes.
+\n\n
+7. CONTACT US\n
+If you have any questions about this Privacy Policy, please contact us via the support channels listed on our application page.
+    </string>
 </resources>
+

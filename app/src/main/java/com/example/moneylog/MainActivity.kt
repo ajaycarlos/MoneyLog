@@ -60,8 +60,7 @@ class MainActivity : AppCompatActivity() {
             runSync()
         }
 
-        // START THE SETUP FLOW
-        checkFirstLaunchFlow()
+
 
         binding.btnSend.setOnClickListener { handleInput() }
         binding.btnMenu.setOnClickListener { binding.drawerLayout.openDrawer(GravityCompat.START) }
