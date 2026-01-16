@@ -60,12 +60,8 @@ class MainActivity : AppCompatActivity() {
             runSync()
         }
 
-        if (!CurrencyHelper.isCurrencySet(this)) {
-            showCurrencySelector(isFirstLaunch = true)
-        } else {
-            loadData()
-            checkMonthlyCheckpoint()
-        }
+        // START THE SETUP FLOW
+        checkFirstLaunchFlow()
 
         binding.btnSend.setOnClickListener { handleInput() }
         binding.btnMenu.setOnClickListener { binding.drawerLayout.openDrawer(GravityCompat.START) }
@@ -104,6 +100,13 @@ class MainActivity : AppCompatActivity() {
 
         // 2. New: Check for cloud updates immediately
         runSync()
+
+
+        // (This handles the case where they went to "Read Policy" and came back)
+        val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("policy_accepted", false)) {
+            checkFirstLaunchFlow()
+        }
     }
 
 
@@ -691,4 +694,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun showError(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+
+    // --- FIRST LAUNCH FLOW (Privacy -> Currency -> App) ---
+
+    private fun checkFirstLaunchFlow() {
+        val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
+        val isPolicyAccepted = prefs.getBoolean("policy_accepted", false)
+
+        if (!isPolicyAccepted) {
+            showPrivacyWelcomeDialog()
+        } else {
+            checkCurrencySetup()
+        }
+    }
+
+    private fun showPrivacyWelcomeDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Welcome to JotPay")
+            .setMessage("Before you start tracking your finances, please accept our terms.\n\n" +
+                    "• Your data is encrypted and stored locally.\n" +
+                    "• Cloud Sync is optional and end-to-end encrypted.\n" +
+                    "• We do not track you or sell your data.")
+            .setCancelable(false) // User MUST click a button
+            .setPositiveButton("Accept & Continue") { _, _ ->
+                // 1. Save Consent
+                getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("policy_accepted", true)
+                    .apply()
+
+                // 2. Move to Next Step
+                checkCurrencySetup()
+            }
+            .setNegativeButton("Read Full Policy") { _, _ ->
+                // Show the full policy page, then ask again when they come back
+                startActivity(Intent(this, PrivacyActivity::class.java))
+            }
+            .show()
+    }
+
+    private fun checkCurrencySetup() {
+        if (!CurrencyHelper.isCurrencySet(this)) {
+            // Step 2: Select Currency
+            showCurrencySelector(isFirstLaunch = true)
+        } else {
+            // Step 3: Load App
+            loadData()
+            checkMonthlyCheckpoint()
+        }
+    }
 }

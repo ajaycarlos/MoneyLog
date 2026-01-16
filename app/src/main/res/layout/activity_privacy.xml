@@ -43,7 +43,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="1. Local Storage Only\nAll your financial logs are stored locally on your device in a secure database. We do not upload your data to any cloud server.\n\n2. No Tracking\nThis app has no analytics, no ads, and no trackers. You are completely anonymous.\n\n3. Export Capability\nYou have full freedom to export your data to CSV or Text files at any time.\n\n4. Permissions\nThe app requires no special permissions (internet, location, contacts) to function."
+                android:text="1. Local-First &amp; Encrypted\nYour data primarily lives locally on your device. If you use 'Device Sync', transactions are encrypted (AES-128) BEFORE leaving your phone. The cloud server (Firebase) only stores scrambled text—it cannot read your financial details.\n\n2. New Permissions\n• Camera: Used strictly to scan QR codes for linking devices.\n• Internet: Used securely to relay encrypted data between your devices. We do not track your location or browsing history.\n\n3. No Tracking\nThis app has no analytics, no ads, and no 3rd-party trackers. You are completely anonymous.\n\n4. Data Ownership\nYou have full freedom to export your data to CSV or Text files at any time. You hold the encryption keys."
                 android:textColor="@color/text_secondary"
                 android:textSize="16sp"
                 android:lineSpacingExtra="6dp"/>
