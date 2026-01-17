@@ -674,22 +674,42 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
     private fun runSync() {
-        syncManager.syncData { message ->
-            // 1. Show message if actual work was done (Synced) or if Error
-            if (message.contains("Error") || message.contains("Synced")) {
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        // 1. Schedule the work
+        val workId = syncManager.scheduleSync()
 
-                // 2. REFRESH SCREEN logic
-                // Now that SyncManager reports deletions as "Synced
-                if (message.contains("Synced")) {
-                    loadData()
+        // 2. Observe the specific job we just scheduled
+        androidx.work.WorkManager.getInstance(this)
+            .getWorkInfoByIdLiveData(workId)
+            .observe(this) { workInfo ->
+                if (workInfo != null) {
+                    when (workInfo.state) {
+                        androidx.work.WorkInfo.State.SUCCEEDED -> {
+                            val msg = workInfo.outputData.getString("MSG") ?: "Sync Complete"
+
+                            // Only show if changes happened or explicit message
+                            if (msg.contains("Synced") || msg.contains("Error")) {
+                                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                            }
+
+                            if (msg.contains("Synced")) {
+                                loadData()
+                            }
+                            binding.swipeRefresh.isRefreshing = false
+                        }
+                        androidx.work.WorkInfo.State.FAILED -> {
+                            val msg = workInfo.outputData.getString("MSG") ?: "Sync Failed"
+                            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                            binding.swipeRefresh.isRefreshing = false
+                        }
+                        androidx.work.WorkInfo.State.RUNNING -> {
+                            binding.swipeRefresh.isRefreshing = true
+                        }
+                        else -> {
+                            // Enqueued or Blocked (waiting for internet)
+                        }
+                    }
                 }
             }
-
-            // 3. STOP SPINNER
-
-            binding.swipeRefresh.isRefreshing = false
-        }
     }
     private fun deleteTransaction(transaction: Transaction) {
         lifecycleScope.launch(Dispatchers.IO) {

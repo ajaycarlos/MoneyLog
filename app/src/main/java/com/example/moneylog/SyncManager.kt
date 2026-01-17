@@ -1,40 +1,41 @@
 package com.example.moneylog
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
+import java.util.UUID
 
 class SyncManager(private val context: Context, private val db: AppDatabase) {
 
     private val prefs = context.getSharedPreferences("jotpay_sync", Context.MODE_PRIVATE)
 
-    // Helper: Check if we have internet
-    private fun isOnline(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return false
-        val capabilities = cm.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    // Helper: Enqueue the WorkManager Job
+    fun scheduleSync(): UUID {
+        // Constraint: Only run when connected to Network
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(context).enqueue(syncRequest)
+        return syncRequest.id
     }
 
-    private fun generateId(t: Transaction, secretKey: String): String {
-        val rawString = "${t.amount}|${t.description}|${t.timestamp}"
-        return EncryptionHelper.encrypt(rawString, secretKey)
-            .replace("/", "_").replace("+", "-").replace("=", "")
-    }
-
-    // Called when user hits "Delete"
+    // "Push Delete" is small enough to keep as a quick fire-and-forget
     fun pushDelete(t: Transaction) {
         val vaultId = prefs.getString("vault_id", null)
         val secretKey = prefs.getString("secret_key", null) ?: return
         if (vaultId == null) return
 
-        // Even if offline, we try. Firebase handles offline caching for writes automatically.
         GlobalScope.launch(Dispatchers.IO) {
             val uniqueId = generateId(t, secretKey)
             val ref = FirebaseDatabase.getInstance().getReference("vaults").child(vaultId)
@@ -43,101 +44,9 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
         }
     }
 
-    fun syncData(onComplete: (String) -> Unit) {
-        // 1. Check Internet First!
-        if (!isOnline()) {
-            onComplete("Skipped: No Internet Connection")
-            return
-        }
-
-        val vaultId = prefs.getString("vault_id", null)
-        val secretKey = prefs.getString("secret_key", null)
-
-        if (vaultId == null || secretKey == null) {
-            onComplete("Skipped: Device not linked")
-            return
-        }
-
-        val ref = FirebaseDatabase.getInstance().getReference("vaults").child(vaultId)
-
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                // STEP 1: Download the "Graveyard"
-                val deletedSnapshot = ref.child("deleted").get().await()
-                val deletedIds = mutableSetOf<String>()
-                for (child in deletedSnapshot.children) {
-                    child.key?.let { deletedIds.add(it) }
-                }
-
-                // STEP 2: Process Local Data
-                var deletedOps = 0
-                val localData = db.transactionDao().getAll()
-                for (t in localData) {
-                    val uniqueId = generateId(t, secretKey)
-                    if (deletedIds.contains(uniqueId)) {
-                        db.transactionDao().delete(t)
-                        deletedOps++
-                    } else {
-                        // Upload
-                        val json = "{\"o\":\"${t.originalText}\", \"a\":${t.amount}, \"d\":\"${t.description}\", \"t\":${t.timestamp}}"
-                        val encryptedData = EncryptionHelper.encrypt(json, secretKey)
-                        ref.child("transactions").child(uniqueId).setValue(encryptedData)
-                    }
-                }
-
-                // STEP 3: Download New Data
-                val serverSnapshot = ref.child("transactions").get().await()
-                var newItemsCount = 0
-
-                for (child in serverSnapshot.children) {
-                    val encryptedJson = child.getValue(String::class.java) ?: continue
-                    val jsonStr = EncryptionHelper.decrypt(encryptedJson, secretKey)
-                    if (jsonStr.isNotEmpty()) {
-                        try {
-                            val clean = jsonStr.replace("{", "").replace("}", "").replace("\"", "")
-                            val parts = clean.split(",")
-                            var originalText = ""; var amount = 0.0; var desc = ""; var timestamp = 0L
-
-                            for (part in parts) {
-                                val kv = part.split(":")
-                                when(kv[0].trim()) {
-                                    "o" -> originalText = kv[1]
-                                    "a" -> amount = kv[1].toDouble()
-                                    "d" -> desc = kv[1]
-                                    "t" -> timestamp = kv[1].toLong()
-                                }
-                            }
-                            val exists = db.transactionDao().checkDuplicate(amount, desc, timestamp - 100, timestamp + 100)
-                            if (exists == 0) {
-                                if (exists == 0) {
-                                    // FIX: Use named arguments to avoid "Int vs String" mismatch
-                                    db.transactionDao().insert(Transaction(
-                                        originalText = originalText,
-                                        amount = amount,
-                                        description = desc,
-                                        timestamp = timestamp
-                                    ))
-                                    newItemsCount++
-                                }
-                            }
-                        } catch (e: Exception) { e.printStackTrace() }
-                    }
-                }
-
-                withContext(Dispatchers.Main) {
-                    if (newItemsCount > 0 || deletedOps > 0) {
-                        onComplete("Synced: $newItemsCount new, $deletedOps deleted")
-                    } else {
-                        onComplete("Sync Complete: Up to date")
-                    }
-                }
-
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    // If it crashes (timeout), we still want to stop the spinner
-                    onComplete("Sync Error: ${e.message}")
-                }
-            }
-        }
+    private fun generateId(t: Transaction, secretKey: String): String {
+        val rawString = "${t.amount}|${t.description}|${t.timestamp}"
+        return EncryptionHelper.encrypt(rawString, secretKey)
+            .replace("/", "_").replace("+", "-").replace("=", "")
     }
 }
