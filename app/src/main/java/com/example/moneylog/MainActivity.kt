@@ -88,23 +88,33 @@ class MainActivity : AppCompatActivity() {
         setupInputPreview()
         setupSignToggles()
         setupKeyboardSwitching()
+
+        val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
+        val isSetupDone = prefs.getBoolean("policy_accepted", false) && CurrencyHelper.isCurrencySet(this)
+
+        if (isSetupDone) {
+            loadData()
+            checkMonthlyCheckpoint()
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // 1. Fix: Auto-reset Edit Mode if needed
+        // 1. Reset Edit Mode if needed
         if (editingTransaction != null) {
             resetInput()
         }
 
-        // 2. New: Check for cloud updates immediately
-        runSync()
-
-
-        // (This handles the case where they went to "Read Policy" and came back)
         val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("policy_accepted", false)) {
+        val policyAccepted = prefs.getBoolean("policy_accepted", false)
+
+        // 2. Logic: If not set up, show Dialog. If set up, Sync.
+        if (!policyAccepted) {
+            // New User: Show Welcome Dialog (This avoids the double-popup)
             checkFirstLaunchFlow()
+        } else {
+            // Existing User: Sync Cloud
+            runSync()
         }
     }
 
