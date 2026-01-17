@@ -27,7 +27,11 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE description LIKE '%' || :keyword || '%'")
     suspend fun search(keyword: String): List<Transaction>
 
+    @Query("SELECT COUNT(*) FROM transactions WHERE timestamp = :timestamp")
+    suspend fun countTimestamp(timestamp: Long): Int
+
     @Query("SELECT COUNT(*) FROM transactions WHERE amount = :amount AND description = :desc AND timestamp BETWEEN :start AND :end")
     suspend fun checkDuplicate(amount: Double, desc: String, start: Long, end: Long): Int
+
 
 }

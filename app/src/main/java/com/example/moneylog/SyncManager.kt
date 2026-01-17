@@ -9,15 +9,14 @@ import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import java.security.MessageDigest
 import java.util.UUID
 
 class SyncManager(private val context: Context, private val db: AppDatabase) {
 
     private val prefs = context.getSharedPreferences("jotpay_sync", Context.MODE_PRIVATE)
 
-    // Helper: Enqueue the WorkManager Job
     fun scheduleSync(): UUID {
-        // Constraint: Only run when connected to Network
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -30,23 +29,26 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
         return syncRequest.id
     }
 
-    // "Push Delete" is small enough to keep as a quick fire-and-forget
     fun pushDelete(t: Transaction) {
         val vaultId = prefs.getString("vault_id", null)
         val secretKey = prefs.getString("secret_key", null) ?: return
         if (vaultId == null) return
 
         GlobalScope.launch(Dispatchers.IO) {
-            val uniqueId = generateId(t, secretKey)
+            // Use the new STABLE ID (based on timestamp only)
+            val uniqueId = generateStableId(t.timestamp)
             val ref = FirebaseDatabase.getInstance().getReference("vaults").child(vaultId)
+
             ref.child("transactions").child(uniqueId).removeValue()
             ref.child("deleted").child(uniqueId).setValue(System.currentTimeMillis())
         }
     }
 
-    private fun generateId(t: Transaction, secretKey: String): String {
-        val rawString = "${t.amount}|${t.description}|${t.timestamp}"
-        return EncryptionHelper.encrypt(rawString, secretKey)
-            .replace("/", "_").replace("+", "-").replace("=", "")
+    // New ID Logic: MD5(timestamp). Stable even if text changes.
+    private fun generateStableId(timestamp: Long): String {
+        val input = "$timestamp"
+        val md = MessageDigest.getInstance("MD5")
+        val digest = md.digest(input.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
     }
 }
