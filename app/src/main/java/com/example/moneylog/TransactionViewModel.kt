@@ -95,7 +95,7 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     // Returns the Work ID so the View can observe the Status
-    fun scheduleSync(): UUID {
-        return repository.scheduleSync()
+    fun scheduleSync(forcePush: Boolean = false): UUID {
+        return repository.scheduleSync(forcePush)
     }
 }

@@ -33,5 +33,8 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE amount = :amount AND description = :desc AND timestamp BETWEEN :start AND :end")
     suspend fun checkDuplicate(amount: Double, desc: String, start: Long, end: Long): Int
 
+    @Query("SELECT * FROM transactions WHERE timestamp = :timestamp LIMIT 1")
+    suspend fun getByTimestamp(timestamp: Long): Transaction?
+
 
 }

@@ -38,7 +38,7 @@ class TransactionAdapter(
         // 2. Amount Styling (Line 2)
         // Clean formatting: Remove trailing .0
         val amountStr = if (item.amount % 1.0 == 0.0) {
-            item.amount.toInt().toString()
+            item.amount.toLong().toString()
         } else {
             item.amount.toString()
         }

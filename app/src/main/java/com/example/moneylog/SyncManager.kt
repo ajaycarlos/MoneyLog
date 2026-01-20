@@ -16,13 +16,16 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
 
     private val prefs = context.getSharedPreferences("jotpay_sync", Context.MODE_PRIVATE)
 
-    fun scheduleSync(): UUID {
+    fun scheduleSync(forcePush: Boolean = false): UUID {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
+        val data = androidx.work.workDataOf("FORCE_PUSH" to forcePush) // Pass flag
+
         val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(constraints)
+            .setInputData(data) // Attach data
             .build()
 
         WorkManager.getInstance(context).enqueue(syncRequest)

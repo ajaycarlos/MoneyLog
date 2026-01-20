@@ -230,8 +230,9 @@ class MainActivity : AppCompatActivity() {
             val finalAmount = evaluatedAmount ?: mathPart.toDouble()
 
             // Format text for storage (e.g. "50 Lunch")
+            // CHANGE: Use .toLong() here too
             val finalRawText = if (finalAmount % 1.0 == 0.0) {
-                "${finalAmount.toInt()} $desc"
+                "${finalAmount.toLong()} $desc"
             } else {
                 "$finalAmount $desc"
             }
@@ -507,7 +508,7 @@ class MainActivity : AppCompatActivity() {
         val frequencyMap = HashMap<String, HashMap<String, Int>>()
 
         for (t in list) {
-            val amountStr = if (t.amount % 1.0 == 0.0) t.amount.toInt().toString() else t.amount.toString()
+            val amountStr = if (t.amount % 1.0 == 0.0) t.amount.toLong().toString() else t.amount.toString()
             val map = frequencyMap.getOrDefault(amountStr, HashMap())
             val count = map.getOrDefault(t.description, 0)
             map[t.description] = count + 1
@@ -618,7 +619,7 @@ class MainActivity : AppCompatActivity() {
                     val cleanDesc = if(descPart.isBlank()) "..." else descPart
                     val symbol = CurrencyHelper.getSymbol(this@MainActivity)
 
-                    val fmtAmount = if (absAmount % 1.0 == 0.0) absAmount.toInt().toString() else String.format("%.1f", absAmount)
+                    val fmtAmount = if (absAmount % 1.0 == 0.0) absAmount.toLong().toString() else String.format("%.1f", absAmount)
 
                     binding.tvInputPreview.text = "$type $symbol$fmtAmount · $cleanDesc"
                     binding.tvInputPreview.visibility = View.VISIBLE
@@ -721,7 +722,7 @@ class MainActivity : AppCompatActivity() {
         // All Time
         val totalSum = list.sumOf { it.amount }
 
-        fun fmt(d: Double): String = if (d % 1.0 == 0.0) d.toInt().toString() else d.toString()
+        fun fmt(d: Double): String = if (d % 1.0 == 0.0) d.toLong().toString() else d.toString()
         val symbol = CurrencyHelper.getSymbol(this)
 
         val summary = "Today:      $symbol ${fmt(todaySum)}\n" +
@@ -758,7 +759,7 @@ class MainActivity : AppCompatActivity() {
             val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
             val symbol = CurrencyHelper.getSymbol(applicationContext)
 
-            fun fmt(d: Double): String = if (d % 1.0 == 0.0) d.toInt().toString() else d.toString()
+            fun fmt(d: Double): String = if (d % 1.0 == 0.0) d.toLong().toString() else d.toString()
 
             if (isCsv) {
                 sb.append("Date,Time,Amount,Description\n")
@@ -875,7 +876,7 @@ class MainActivity : AppCompatActivity() {
 
                     withContext(Dispatchers.Main) {
                         val symbol = CurrencyHelper.getSymbol(this@MainActivity)
-                        val fmtSum = if (sum % 1.0 == 0.0) sum.toInt().toString() else String.format("%.1f", sum)
+                        val fmtSum = if (sum % 1.0 == 0.0) sum.toLong().toString() else String.format("%.1f", sum)
 
                         binding.tvMonthlySummary.text = "Last month ($prevMonthName): $symbol $fmtSum"
                         binding.tvMonthlySummary.visibility = View.VISIBLE

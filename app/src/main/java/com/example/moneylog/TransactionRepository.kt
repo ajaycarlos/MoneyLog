@@ -29,7 +29,7 @@ class TransactionRepository(private val db: AppDatabase, private val syncManager
     }
 
     // Trigger the Syncworker
-    fun scheduleSync(): UUID {
-        return syncManager.scheduleSync()
+    fun scheduleSync(forcePush: Boolean = false): UUID {
+        return syncManager.scheduleSync(forcePush)
     }
 }
