@@ -25,7 +25,16 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
             .setInputData(data)
             .build()
 
-        WorkManager.getInstance(context).enqueue(syncRequest)
+
+        // This ensures that if an Offline Edit (Force=True) is pending,
+        // a subsequent 'onResume' Sync (Force=False) MUST wait for the Edit to finish first.
+        // Prevents the "Refresh" from overwriting the "Edit".
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "JotPaySyncQueue",
+            androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,
+            syncRequest
+        )
+
         return syncRequest.id
     }
 

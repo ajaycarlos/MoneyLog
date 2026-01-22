@@ -17,8 +17,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val secretKey = prefs.getString("secret_key", null)
         val forcePush = inputData.getBoolean("FORCE_PUSH", false)
 
+        // FIX: If device is not linked, just return Success silently.
+        // Returning 'failure' caused the "Skipped: Device not linked" popup.
         if (vaultId == null || secretKey == null) {
-            return Result.failure(workDataOf("MSG" to "Skipped: Device not linked"))
+            return Result.success()
         }
 
         val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "moneylog-db").build()
@@ -27,7 +29,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         try {
             val ref = FirebaseDatabase.getInstance().getReference("vaults").child(vaultId)
 
-            // STEP 0: PROCESS PENDING DELETES (From Bug 3 Fix)
+            // STEP 0: PROCESS PENDING DELETES
             val pendingDeletes = syncManager.getPendingDeletes()
             for (tsString in pendingDeletes) {
                 val ts = tsString.toLongOrNull() ?: continue
@@ -60,8 +62,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     db.transactionDao().delete(t)
                     changesCount++
                 } else {
-                    // BUG 4 FIX: Use JSONObject for safe serialization
-                    // This handles commas, quotes, and newlines correctly
+                    // JSON Generation
                     val jsonObject = org.json.JSONObject()
                     jsonObject.put("o", t.originalText)
                     jsonObject.put("a", t.amount)
@@ -70,7 +71,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
                     val encryptedData = EncryptionHelper.encrypt(jsonObject.toString(), secretKey)
 
-                    // CONFLICT CHECK (From Bug 2 Fix)
+                    // Conflict Check
                     var shouldPush = true
                     if (serverSnapshot.hasChild(stableId)) {
                         val serverVal = serverSnapshot.child(stableId).value.toString()
@@ -98,18 +99,13 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
                 if (jsonStr.isNotEmpty()) {
                     try {
-                        // BUG 4 FIX: Use JSONObject for safe parsing
                         val jsonObject = org.json.JSONObject(jsonStr)
-
                         val originalText = jsonObject.optString("o")
                         val amount = jsonObject.optDouble("a")
                         val desc = jsonObject.optString("d")
                         val timestamp = jsonObject.optLong("t")
 
-                        // Zombie Check (From Bug 3 Fix)
-                        if (activePendingDeletes.contains(timestamp)) {
-                            continue
-                        }
+                        if (activePendingDeletes.contains(timestamp)) continue
 
                         val existing = db.transactionDao().getByTimestamp(timestamp)
 
