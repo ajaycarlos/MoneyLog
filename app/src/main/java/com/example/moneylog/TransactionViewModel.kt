@@ -74,9 +74,14 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
     fun search(query: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val results = repository.search(query)
+
+            // BUG 6 FIX: Calculate the balance of the SEARCH RESULTS
+            // Previously, the balance remained at the global total, which was confusing.
+            val searchTotal = results.sumOf { it.amount }
+
             withContext(Dispatchers.Main) {
                 _transactions.value = results
-                // Don't update balance during search, or do? Usually better to keep total balance visible.
+                _totalBalance.value = searchTotal
             }
         }
     }

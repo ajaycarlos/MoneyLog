@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var adapter: TransactionAdapter
     private var editingTransaction: Transaction? = null
+    private var pendingEditId: Long = 0L
     private var balanceAnimator: ValueAnimator? = null
     private var currentDisplayedBalance = 0.0
 
@@ -57,6 +58,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        if (savedInstanceState != null) {
+            pendingEditId = savedInstanceState.getLong("editing_id", 0L)
+        }
 
         // 1. Setup UI Components
         setupRecyclerView()
@@ -103,19 +108,24 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Reset edit mode if returning from background
-        if (editingTransaction != null) {
-            resetInput()
-        }
+        // BUG 8 FIX: Removed aggressive resetInput().
+        // Previously, switching apps (e.g. to Calculator) killed your edit session.
 
         val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
-        // If policy not accepted, show dialog. Otherwise, Sync.
         if (!prefs.getBoolean("policy_accepted", false)) {
             checkFirstLaunchFlow()
         } else {
-            // Refresh local data and trigger background sync
             viewModel.refreshData()
             runSync()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // BUG 8 FIX: Save the ID of the transaction we are editing
+        // so we can restore it after rotation.
+        editingTransaction?.let {
+            outState.putLong("editing_id", it.timestamp)
         }
     }
 
@@ -126,6 +136,18 @@ class MainActivity : AppCompatActivity() {
         viewModel.transactions.observe(this) { list ->
             adapter.updateData(list)
             updateAutocomplete(list)
+
+            // --- BUG 8 FIX: Restore Edit Mode after rotation ---
+            // If we have a pending edit ID (saved from onCreate), find that transaction
+            // and restart the edit session automatically.
+            if (pendingEditId != 0L) {
+                val target = list.find { it.timestamp == pendingEditId }
+                if (target != null) {
+                    startEditing(target)
+                    pendingEditId = 0L // Clear it so we don't do this again
+                }
+            }
+            // ---------------------------------------------------
 
             if (list.isEmpty()) {
                 binding.tvEmptyState.text = "Type +500 salary or -40 bus to begin"
@@ -148,8 +170,6 @@ class MainActivity : AppCompatActivity() {
 
             // 2. Animate only if value changed
             if (currentDisplayedBalance != finalTotal) {
-                // FIX: Use 'ofObject' with our custom DoubleEvaluator
-                // We MUST cast start/end to 'Any' or explicit Double to avoid crashes
                 val animator = ValueAnimator.ofObject(
                     DoubleEvaluator(),
                     currentDisplayedBalance,
@@ -159,7 +179,6 @@ class MainActivity : AppCompatActivity() {
 
                 animator.addUpdateListener { animation ->
                     val animatedValue = animation.animatedValue as Double
-
                     val formattedValue = if (animatedValue % 1.0 == 0.0) {
                         animatedValue.toLong().toString()
                     } else {
@@ -168,7 +187,6 @@ class MainActivity : AppCompatActivity() {
                     binding.tvTotalBalance.text = "$symbol $formattedValue"
                 }
 
-                // Force exact value at the end (just in case)
                 animator.addListener(object : android.animation.AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: android.animation.Animator) {
                         val formattedValue = if (finalTotal % 1.0 == 0.0) {
@@ -184,7 +202,6 @@ class MainActivity : AppCompatActivity() {
                 balanceAnimator = animator
                 currentDisplayedBalance = finalTotal
             } else {
-                // No animation needed
                 val formattedValue = if (finalTotal % 1.0 == 0.0) {
                     finalTotal.toLong().toString()
                 } else {
@@ -380,37 +397,48 @@ class MainActivity : AppCompatActivity() {
                 val reader = BufferedReader(InputStreamReader(inputStream))
                 val importList = ArrayList<Transaction>()
 
-                // Headers: Date,Time,Amount,Description
-                reader.readLine() // Skip Header
+                // Read Header
+                val header = reader.readLine() // "Date,Time,Amount,Description,Timestamp"
 
                 var line = reader.readLine()
                 val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-
-                // BUG FIX: Track timestamps used in this specific file to prevent ID collisions
                 val usedTimestamps = HashSet<Long>()
 
                 while (line != null) {
-                    val parts = line.split(",")
-                    if (parts.size >= 4) {
-                        val amount = parts[2].toDoubleOrNull() ?: 0.0
-                        // Reassemble description if it contained commas
-                        val desc = parts.subList(3, parts.size).joinToString(",").replace("\"", "")
+                    // BUG 7 FIX: Proper CSV Regex splitting
+                    // This handles "Comma in quotes" and "Empty fields" correctly
+                    // It produces list of tokens, stripping wrapping quotes
+                    val tokens = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+                        .map { it.trim().removeSurrounding("\"").replace("\"\"", "\"") }
 
-                        val dateStr = "${parts[0]} ${parts[1]}"
-                        var timestamp = try {
-                            dateFormat.parse(dateStr)?.time
-                        } catch (e: Exception) {
-                            System.currentTimeMillis()
-                        } ?: System.currentTimeMillis()
+                    if (tokens.size >= 4) {
+                        val dateStr = "${tokens[0]} ${tokens[1]}"
+                        val amount = tokens[2].toDoubleOrNull() ?: 0.0
+                        val desc = tokens[3]
 
-                        // CRITICAL FIX: Ensure uniqueness
-                        // If this exact millisecond is already used, keep adding 1ms until it's unique
+                        // TIMESTAMP RESTORATION LOGIC
+                        var timestamp: Long = 0L
+
+                        // 1. Try reading the new 'Timestamp' column (Index 4)
+                        if (tokens.size >= 5 && tokens[4].toLongOrNull() != null) {
+                            timestamp = tokens[4].toLong()
+                        }
+
+                        // 2. Fallback: Parse Date String (for old backups)
+                        if (timestamp == 0L) {
+                            timestamp = try {
+                                dateFormat.parse(dateStr)?.time
+                            } catch (e: Exception) {
+                                System.currentTimeMillis()
+                            } ?: System.currentTimeMillis()
+                        }
+
+                        // 3. Collision Check (From Bug 1)
                         while (usedTimestamps.contains(timestamp)) {
                             timestamp += 1
                         }
                         usedTimestamps.add(timestamp)
 
-                        // Cleanup formatting for the text (Remove .0 if integer)
                         val fmtAmount = if (amount % 1.0 == 0.0) amount.toLong().toString() else amount.toString()
 
                         importList.add(Transaction(
@@ -423,7 +451,6 @@ class MainActivity : AppCompatActivity() {
                     line = reader.readLine()
                 }
 
-                // Pass list to ViewModel to handle database insertion
                 viewModel.importTransactionList(importList)
 
                 withContext(Dispatchers.Main) {
@@ -811,10 +838,13 @@ class MainActivity : AppCompatActivity() {
             fun fmt(d: Double): String = if (d % 1.0 == 0.0) d.toLong().toString() else d.toString()
 
             if (isCsv) {
-                sb.append("Date,Time,Amount,Description\n")
+                // BUG 7 FIX: Added 'Timestamp' column for precision restoration
+                sb.append("Date,Time,Amount,Description,Timestamp\n")
                 for (t in transactions) {
                     val date = Date(t.timestamp)
-                    sb.append("${dateFormat.format(date)},${timeFormat.format(date)},${fmt(t.amount)},\"${t.description.replace("\"", "\"\"")}\"\n")
+                    // CSV Escape: Replace " with "" and wrap in "
+                    val safeDesc = t.description.replace("\"", "\"\"")
+                    sb.append("${dateFormat.format(date)},${timeFormat.format(date)},${fmt(t.amount)},\"$safeDesc\",${t.timestamp}\n")
                 }
             } else {
                 sb.append("JotPay REPORT\n")
