@@ -270,39 +270,33 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleInput() {
         val rawText = binding.etInput.text.toString().trim()
-        if (rawText.isEmpty()) return
 
-        val split = rawText.split(" ", limit = 2)
-        val mathPart = split[0]
-        val desc = if (split.size > 1) split[1].replaceFirstChar { it.uppercase() } else "General"
+        // 1. Use Smart Parser to check for valid money input
+        val parsed = parseTransactionInput(rawText)
 
-        // Try to evaluate math (e.g., "50+20")
-        val evaluatedAmount = evaluateMath(mathPart)
+        if (parsed != null) {
+            // --- VALID TRANSACTION DETECTED ---
+            val (amount, desc) = parsed
 
-        // It is a transaction if it's a number OR a valid math expression
-        if (evaluatedAmount != null || mathPart.toDoubleOrNull() != null) {
-            val finalAmount = evaluatedAmount ?: mathPart.toDouble()
-
-            // Format text for storage (e.g. "50 Lunch")
-            // CHANGE: Use .toLong() here too
-            val finalRawText = if (finalAmount % 1.0 == 0.0) {
-                "${finalAmount.toLong()} $desc"
+            // Normalize: Always store as "50 Desc"
+            val finalRawText = if (amount % 1.0 == 0.0) {
+                "${amount.toLong()} $desc"
             } else {
-                "$finalAmount $desc"
+                "$amount $desc"
             }
 
             binding.btnSend.isEnabled = false
 
             if (editingTransaction == null) {
-                // ADD NEW (Via ViewModel)
-                viewModel.addTransaction(finalRawText, finalAmount, desc)
+                // ADD NEW
+                viewModel.addTransaction(finalRawText, amount, desc)
                 binding.rvTransactions.scrollToPosition(0)
             } else {
-                // UPDATE EXISTING (Via ViewModel)
+                // UPDATE EXISTING
                 val current = editingTransaction!!
                 val updated = current.copy(
                     originalText = finalRawText,
-                    amount = finalAmount,
+                    amount = amount,
                     description = desc
                 )
                 viewModel.updateTransaction(updated)
@@ -310,16 +304,43 @@ class MainActivity : AppCompatActivity() {
             }
 
             resetInput()
-            runSync(force = true) // Trigger sync after adding/editing
+            runSync(force = true)
 
         } else {
-            // SEARCH MODE
-            // 1. Filter the list visually
-            viewModel.search(rawText)
-
-            // 2. Also check for "Natural Language Query" (e.g. "How much spent on food?")
-            processNaturalLanguageQuery(rawText)
+            // --- INVALID INPUT (No number found) ---
+            // Do NOT search. Do NOT query. Just show guidance.
+            showError("Please enter an amount (e.g., '50 Coffee')")
         }
+    }
+
+    // Helper: Checks for a number at the START ("50 Coffee") or END ("Coffee 50")
+    private fun parseTransactionInput(text: String): Pair<Double, String>? {
+        if (text.isBlank()) return null
+
+        // 1. Try Standard Format: "50 Coffee" (Amount at Start)
+        val splitFirst = text.split(" ", limit = 2)
+        val firstPart = splitFirst[0]
+        val firstEval = evaluateMath(firstPart) ?: firstPart.toDoubleOrNull()
+
+        if (firstEval != null) {
+            val desc = if (splitFirst.size > 1) splitFirst[1].replaceFirstChar { it.uppercase() } else "General"
+            return Pair(firstEval, desc)
+        }
+
+        // 2. Try Reverse Format: "Coffee 50" (Amount at End)
+        val lastSpace = text.lastIndexOf(' ')
+        if (lastSpace != -1) {
+            val lastPart = text.substring(lastSpace + 1)
+            val lastEval = evaluateMath(lastPart) ?: lastPart.toDoubleOrNull()
+
+            if (lastEval != null) {
+                val descPart = text.substring(0, lastSpace).trim()
+                val desc = if (descPart.isNotEmpty()) descPart.replaceFirstChar { it.uppercase() } else "General"
+                return Pair(lastEval, desc)
+            }
+        }
+
+        return null
     }
 
 
@@ -363,26 +384,7 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    // --- LOGIC HELPERS ---
 
-    private fun processNaturalLanguageQuery(rawText: String) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            // Grab current list from ViewModel
-            val list = viewModel.transactions.value ?: emptyList()
-            if (list.isNotEmpty()) {
-                val processor = QueryProcessor(list)
-                val answer = processor.process(rawText)
-
-                // If the processor found a valid answer (starts with "Total"), show dialog
-                if (answer.startsWith("Total") || answer.startsWith("Net")) {
-                    withContext(Dispatchers.Main) {
-                        showResultDialog(rawText, answer)
-                        binding.etInput.text.clear()
-                    }
-                }
-            }
-        }
-    }
 
     private fun deleteTransaction(transaction: Transaction) {
         viewModel.deleteTransaction(transaction)
@@ -710,15 +712,7 @@ class MainActivity : AppCompatActivity() {
         binding.etInput.setOnClickListener { updateSignToggleVisibility() }
     }
 
-    // --- DIALOGS ---
 
-    private fun showResultDialog(q: String, a: String) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(q)
-            .setMessage(android.text.Html.fromHtml(a, android.text.Html.FROM_HTML_MODE_LEGACY))
-            .setPositiveButton("OK", null)
-            .show()
-    }
 
     private fun showActionDialog(transaction: Transaction) {
         val options = arrayOf("Edit", "Delete")
