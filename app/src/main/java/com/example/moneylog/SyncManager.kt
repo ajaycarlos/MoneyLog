@@ -1,7 +1,6 @@
 package com.example.moneylog
 
 import android.content.Context
-import androidx.room.Room
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -25,21 +24,14 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
             .setInputData(data)
             .build()
 
-
-        // This ensures that if an Offline Edit (Force=True) is pending,
-        // a subsequent 'onResume' Sync (Force=False) MUST wait for the Edit to finish first.
-        // Prevents the "Refresh" from overwriting the "Edit".
         WorkManager.getInstance(context).enqueueUniqueWork(
             "JotPaySyncQueue",
             androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )
-
         return syncRequest.id
     }
 
-    // FIX: Instead of trying to delete immediately (which might fail),
-    // we just save the timestamp to a "Pending List" and let the Worker handle it.
     fun queueDelete(timestamp: Long) {
         val pending = getPendingDeletes().toMutableSet()
         pending.add(timestamp.toString())
@@ -56,11 +48,32 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
         prefs.edit().putStringSet("pending_deletes", pending).apply()
     }
 
-    // Helper to generate the Stable ID (used by Worker)
     fun generateStableId(timestamp: Long): String {
         val input = "$timestamp"
         val md = MessageDigest.getInstance("MD5")
         val digest = md.digest(input.toByteArray())
         return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    // --- NEW: Device Identity & Unlink Logic ---
+
+    fun getInstallationId(): String {
+        var id = prefs.getString("installation_id", null)
+        if (id == null) {
+            id = UUID.randomUUID().toString()
+            prefs.edit().putString("installation_id", id).apply()
+        }
+        return id!!
+    }
+
+    fun unlinkDevice() {
+        // Reset to a FRESH random vault, effectively "Unlinking" from the shared one
+        val newVault = UUID.randomUUID().toString()
+        val newKey = UUID.randomUUID().toString().substring(0, 16)
+
+        prefs.edit()
+            .putString("vault_id", newVault)
+            .putString("secret_key", newKey)
+            .apply()
     }
 }
