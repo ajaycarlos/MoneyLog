@@ -515,7 +515,15 @@ class MainActivity : AppCompatActivity() {
         binding.btnPlus.setOnClickListener { insertSign("+") }
         binding.btnMinus.setOnClickListener { insertSign("-") }
 
+        // Updated to handle the ImageButton
+        binding.btnSpace.setOnClickListener {
+            insertSign(" ")
+            // The visibility logic below will automatically hide the bar
+            // because the text now contains a space.
+        }
+
         binding.etInput.setOnFocusChangeListener { _, _ -> updateSignToggleVisibility() }
+        // Ensure we check visibility immediately
         updateSignToggleVisibility()
     }
 
@@ -530,19 +538,53 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSignToggleVisibility() {
         val text = binding.etInput.text.toString()
-        val shouldShow = text.isEmpty()
 
-        if (shouldShow) {
+        // Logic: Is this a transaction start (numeric) that hasn't moved to description yet?
+        val isNumericMode = (text.startsWith("+") || text.startsWith("-") || text.firstOrNull()?.isDigit() == true)
+                && !text.contains(" ")
+
+        // Rule: Show if empty (Idle) OR if in Numeric Mode
+        val shouldShowBar = text.isEmpty() || isNumericMode
+
+        if (shouldShowBar) {
+            // FADE IN
             if (binding.layoutSignToggles.visibility != View.VISIBLE) {
                 binding.layoutSignToggles.alpha = 0f
                 binding.layoutSignToggles.visibility = View.VISIBLE
-                binding.layoutSignToggles.animate().alpha(1f).setDuration(150).start()
+                binding.layoutSignToggles.animate()
+                    .alpha(1f)
+                    .setDuration(150)
+                    .withEndAction(null) // Clear any old end actions
+                    .start()
+            } else {
+                // Ensure it's fully visible if we cancelled a fade-out
+                binding.layoutSignToggles.alpha = 1f
             }
+
+            // Manage Button Visibility inside the bar
+            if (text.isEmpty()) {
+                // IDLE: Show +/- only
+                binding.btnPlus.visibility = View.VISIBLE
+                binding.btnMinus.visibility = View.VISIBLE
+                binding.btnSpace.visibility = View.GONE
+            } else {
+                // NUMERIC: Show +/- and Space
+                binding.btnPlus.visibility = View.VISIBLE
+                binding.btnMinus.visibility = View.VISIBLE
+                binding.btnSpace.visibility = View.VISIBLE
+            }
+
         } else {
-            if (binding.layoutSignToggles.visibility == View.VISIBLE) {
-                binding.layoutSignToggles.animate().alpha(0f).setDuration(150).withEndAction {
-                    binding.layoutSignToggles.visibility = View.INVISIBLE
-                }.start()
+            // FADE OUT & GONE
+            if (binding.layoutSignToggles.visibility == View.VISIBLE && binding.layoutSignToggles.alpha == 1f) {
+                binding.layoutSignToggles.animate()
+                    .alpha(0f)
+                    .setDuration(150)
+                    .withEndAction {
+                        // CRITICAL: This removes the box completely from layout
+                        binding.layoutSignToggles.visibility = View.GONE
+                    }
+                    .start()
             }
         }
     }
