@@ -12,10 +12,28 @@ object EncryptionHelper {
     private const val ALGORITHM = "AES/CBC/PKCS5Padding"
     private const val IV_SIZE = 16
 
-    // Ensure key is exactly 128-bit
+    // FIX 3: Robust Key Formatting
+    // Handles multi-byte characters safely while maintaining backward compatibility for ASCII keys.
     private fun formatKey(key: String): SecretKeySpec {
-        val paddedKey = key.padEnd(16, '0').substring(0, 16)
-        return SecretKeySpec(paddedKey.toByteArray(Charsets.UTF_8), "AES")
+        // Step 1: Mimic the old padding logic (Chars)
+        // This ensures "123" becomes "123000..." (ASCII '0', not null byte)
+        // maintaining access for existing users with short passwords.
+        val paddedChars = key.padEnd(16, '0')
+
+        // Step 2: Convert to bytes (UTF-8)
+        // If 'key' contained special chars (e.g. "Möney"), this array might now be 17+ bytes.
+        val rawBytes = paddedChars.toByteArray(Charsets.UTF_8)
+
+        // Step 3: Enforce strict 16-byte length
+        // We truncate the byte array to exactly 16 bytes to satisfy AES-128 requirements.
+        // We do not need to pad here because Step 1 ensured we have at least 16 chars (>= 16 bytes).
+        val finalKeyBytes = if (rawBytes.size == 16) {
+            rawBytes
+        } else {
+            rawBytes.copyOf(16)
+        }
+
+        return SecretKeySpec(finalKeyBytes, "AES")
     }
 
     fun encrypt(text: String, secretKey: String): String {

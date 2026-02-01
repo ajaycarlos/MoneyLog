@@ -9,6 +9,7 @@ import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 import java.security.MessageDigest
+import kotlin.math.abs
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -26,6 +27,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val syncManager = SyncManager(applicationContext, db)
 
         try {
+            // FIX 1: SANITIZE (Prevents Same-Second Overwrites)
+            sanitizeLocalTimestamps(db)
+
             val ref = FirebaseDatabase.getInstance().getReference("vaults").child(vaultId)
 
             // STEP 0: PROCESS PENDING DELETES
@@ -61,17 +65,17 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 val stableId = syncManager.generateStableId(t.timestamp)
 
                 if (deletedIds.contains(stableId)) {
+                    // Respect Server Deletion
                     db.transactionDao().delete(t)
                     changesCount++
                 } else {
-                    // JSON Generation: UPDATED with Nature and Obligation
                     val jsonObject = JSONObject()
                     jsonObject.put("o", t.originalText)
                     jsonObject.put("a", t.amount)
                     jsonObject.put("d", t.description)
                     jsonObject.put("t", t.timestamp)
-                    jsonObject.put("n", t.nature) // NEW
-                    jsonObject.put("oa", t.obligationAmount) // NEW
+                    jsonObject.put("n", t.nature)
+                    jsonObject.put("oa", t.obligationAmount)
 
                     // Conflict Check
                     var shouldPush = true
@@ -88,12 +92,15 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                                 val sText = serverObj.optString("o")
                                 val sAmt = serverObj.optDouble("a")
                                 val sDesc = serverObj.optString("d")
-                                val sNature = serverObj.optString("n", "NORMAL") // NEW
-                                val sObligation = serverObj.optDouble("oa", 0.0) // NEW
+                                val sNature = serverObj.optString("n", "NORMAL")
+                                val sObligation = serverObj.optDouble("oa", 0.0)
 
-                                // Precise check including new fields
-                                if (sText == t.originalText && sAmt == t.amount && sDesc == t.description
-                                    && sNature == t.nature && sObligation == t.obligationAmount) {
+                                // FIX 2: Float Tolerance (Prevent Loops)
+                                val isAmtMatch = abs(sAmt - t.amount) < 0.001
+                                val isObliMatch = abs(sObligation - t.obligationAmount) < 0.001
+
+                                if (sText == t.originalText && isAmtMatch && sDesc == t.description
+                                    && sNature == t.nature && isObliMatch) {
                                     isContentMatch = true
                                 }
                             } catch (e: Exception) {}
@@ -133,8 +140,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                         val amount = jsonObject.optDouble("a")
                         val desc = jsonObject.optString("d")
                         val timestamp = jsonObject.optLong("t")
-                        val nature = jsonObject.optString("n", "NORMAL") // NEW
-                        val obligationAmount = jsonObject.optDouble("oa", 0.0) // NEW
+                        val nature = jsonObject.optString("n", "NORMAL")
+                        val obligationAmount = jsonObject.optDouble("oa", 0.0)
 
                         if (activePendingDeletes.contains(timestamp)) continue
 
@@ -151,9 +158,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                             ))
                             changesCount++
                         } else {
-                            // Update check including new fields
-                            if (existing.originalText != originalText || existing.amount != amount ||
-                                existing.description != desc || existing.nature != nature) {
+                            // Update Check with Tolerance
+                            val isAmtDiff = abs(existing.amount - amount) > 0.001
+                            val isObliDiff = abs(existing.obligationAmount - obligationAmount) > 0.001
+
+                            if (existing.originalText != originalText || isAmtDiff ||
+                                existing.description != desc || existing.nature != nature || isObliDiff) {
                                 val updated = existing.copy(
                                     originalText = originalText,
                                     amount = amount,
@@ -181,10 +191,32 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
     }
 
-    private fun generateStableId(timestamp: Long): String {
-        val input = "$timestamp"
-        val md = MessageDigest.getInstance("MD5")
-        val digest = md.digest(input.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
+    // --- NEW HELPER: Resolves Timestamp Collisions Locally ---
+    private suspend fun sanitizeLocalTimestamps(db: AppDatabase) {
+        val dao = db.transactionDao()
+        val all = dao.getAll().sortedBy { it.timestamp }
+
+        var lastTimestamp = -1L
+        val updates = java.util.ArrayList<Transaction>()
+
+        for (t in all) {
+            if (t.timestamp <= lastTimestamp) {
+                val newTimestamp = lastTimestamp + 1
+                val fixedT = t.copy(timestamp = newTimestamp)
+                updates.add(fixedT)
+                lastTimestamp = newTimestamp
+            } else {
+                lastTimestamp = t.timestamp
+            }
+        }
+
+        if (updates.isNotEmpty()) {
+            for (t in updates) {
+                // We use delete+insert because updating the PrimaryKey (timestamp?) might be tricky
+                // depending on your Schema. If 'id' is PK, update is fine.
+                // Assuming 'id' is PK, 'update' works.
+                dao.update(t)
+            }
+        }
     }
 }

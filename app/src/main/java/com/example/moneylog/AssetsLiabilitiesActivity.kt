@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.moneylog.databinding.ActivityAssetsLiabilitiesBinding
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class AssetsLiabilitiesActivity : AppCompatActivity() {
 
@@ -33,8 +34,11 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { finish() }
 
         binding.rvList.layoutManager = LinearLayoutManager(this)
-        // Reuse existing adapter. Click listener is empty for now.
-        adapter = TransactionAdapter(emptyList()) { }
+
+        // FIX: Pass the actual click listener to handle Long-Press -> Delete
+        adapter = TransactionAdapter(emptyList()) { transaction ->
+            showActionDialog(transaction)
+        }
         binding.rvList.adapter = adapter
 
         // Tab Switching Logic
@@ -62,7 +66,6 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
 
     private fun styleButton(btn: MaterialButton, isActive: Boolean, activeColorRes: Int) {
         if (isActive) {
-            // FIX: Use backgroundTintList instead of setBackgroundColor
             btn.backgroundTintList = ContextCompat.getColorStateList(this, activeColorRes)
             btn.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
             btn.strokeWidth = 0
@@ -81,6 +84,13 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
         viewModel.liabilities.observe(this) { updateDisplay() }
         viewModel.totalAssets.observe(this) { updateDisplay() }
         viewModel.totalLiabilities.observe(this) { updateDisplay() }
+
+        // FIX: Observe main transactions to auto-refresh this screen after a delete
+        // When 'deleteTransaction' is called, it refreshes 'transactions'.
+        // We catch that here and reload our specific asset/liability lists.
+        viewModel.transactions.observe(this) {
+            viewModel.loadAssetsAndLiabilities()
+        }
     }
 
     private fun updateDisplay() {
@@ -108,7 +118,7 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
             // Render Liabilities
             binding.tvTotalLabel.text = "TOTAL TO PAY"
 
-            // FIX: Use kotlin.math.abs() to remove the negative sign
+            // Use kotlin.math.abs() to remove the negative sign
             binding.tvTotalValue.text = "$symbol ${fmt(kotlin.math.abs(total))}"
 
             binding.tvTotalValue.setTextColor(ContextCompat.getColor(this, R.color.expense_red))
@@ -118,6 +128,28 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
 
             binding.tvEmptyHint.visibility = if(list.isEmpty()) View.VISIBLE else View.GONE
         }
+    }
+
+    // NEW: Action Dialog to Settle/Delete
+    private fun showActionDialog(transaction: Transaction) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Action")
+            .setItems(arrayOf("Settle / Delete")) { _, _ ->
+                confirmDelete(transaction)
+            }
+            .show()
+    }
+
+    private fun confirmDelete(transaction: Transaction) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Settle & Delete?")
+            .setMessage("Mark '${transaction.description}' as settled/removed?")
+            .setPositiveButton("Delete") { _, _ ->
+                // This will trigger the observer setup above to reload the list
+                viewModel.deleteTransaction(transaction)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun fmt(d: Double): String {

@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.room.Room
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.appcompat.app.AppCompatDelegate
 import com.example.moneylog.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -583,6 +587,11 @@ class MainActivity : AppCompatActivity() {
                     val op = tokens[i]
                     val prev = tokens[i - 1].toDouble()
                     val next = tokens[i + 1].toDouble()
+
+                    // --- FIX APPLIED HERE: DIV BY ZERO CHECK ---
+                    if (op == "/" && next == 0.0) return null
+                    // -------------------------------------------
+
                     val res = if (op == "*") prev * next else prev / next
                     tokens[i - 1] = res.toString()
                     tokens.removeAt(i); tokens.removeAt(i)
