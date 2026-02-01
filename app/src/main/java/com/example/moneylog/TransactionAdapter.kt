@@ -1,19 +1,26 @@
 package com.example.moneylog
 
+import android.content.Context
+import android.content.res.Configuration
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.example.moneylog.databinding.ItemTransactionBinding
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 class TransactionAdapter(
     private var transactions: List<Transaction>,
     private val onDeleteClick: (Transaction) -> Unit
 ) : RecyclerView.Adapter<TransactionAdapter.TransactionViewHolder>() {
+
+    // Flag to toggle sign display (+/-) while keeping color logic
+    var showSigns: Boolean = true
 
     private val timeFormatter = SimpleDateFormat("h:mm a", Locale.getDefault())
     private val dateFullFormatter = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
@@ -32,32 +39,36 @@ class TransactionAdapter(
         val item = transactions[position]
         val context = holder.itemView.context
 
-        // 1. Context Text (Line 1)
+        // 1. Context Text
         holder.binding.tvMessage.text = item.description
 
-        // 2. Amount Styling (Line 2)
-        // Clean formatting: Remove trailing .0
-        val amountStr = if (item.amount % 1.0 == 0.0) {
-            item.amount.toLong().toString()
+        // 2. Amount Styling
+        val isIncome = item.amount >= 0
+        val rawAmt = if (item.amount % 1.0 == 0.0) {
+            abs(item.amount).toLong().toString()
         } else {
-            item.amount.toString()
+            abs(item.amount).toString()
         }
 
-        val isIncome = item.amount >= 0
-        // Visual sign for clarity
-        val displayAmount = if (isIncome) "+ $amountStr" else amountStr.replace("-", "- ")
-
+        // Sign Logic
+        val displayAmount = if (showSigns) {
+            if (isIncome) "+ $rawAmt" else "- $rawAmt"
+        } else {
+            rawAmt // Just the number (e.g. "500")
+        }
         holder.binding.tvAmount.text = displayAmount
 
-        // 3. Color Logic (Muted Chat-Lite Colors)
-        // Using context.getColorCompat style safely
+        // 3. Color Logic
+        // FIX: Removed "Day Mode" check since we are strictly enforcing Dark Mode.
+        // We now always use the Muted colors which exist in your colors.xml.
         val colorRes = if (isIncome) R.color.income_muted else R.color.expense_muted
-        holder.binding.tvAmount.setTextColor(context.resources.getColor(colorRes, null))
+
+        holder.binding.tvAmount.setTextColor(ContextCompat.getColor(context, colorRes))
 
         // 4. Time
         holder.binding.tvTime.text = timeFormatter.format(Date(item.timestamp))
 
-        // 5. Date Headers (Separators)
+        // 5. Date Headers
         val headerText = getDateHeader(item.timestamp)
         var showHeader = position == 0
         if (position > 0) {

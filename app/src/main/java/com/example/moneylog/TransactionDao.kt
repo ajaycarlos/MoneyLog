@@ -11,7 +11,6 @@ interface TransactionDao {
     @Insert
     suspend fun insert(transaction: Transaction)
 
-    // NEW: Capability to edit an existing row
     @Update
     suspend fun update(transaction: Transaction)
 
@@ -24,7 +23,9 @@ interface TransactionDao {
     @Query("SELECT SUM(amount) FROM transactions")
     suspend fun getTotalBalance(): Double?
 
-    @Query("SELECT * FROM transactions WHERE description LIKE '%' || :keyword || '%'")
+    // FIX: Now searches both Description AND Amount
+    // We cast amount to TEXT so '500' matches '500.0' or '-500'
+    @Query("SELECT * FROM transactions WHERE description LIKE '%' || :keyword || '%' OR CAST(amount AS TEXT) LIKE '%' || :keyword || '%'")
     suspend fun search(keyword: String): List<Transaction>
 
     @Query("SELECT COUNT(*) FROM transactions WHERE timestamp = :timestamp")
@@ -47,6 +48,4 @@ interface TransactionDao {
 
     @Query("SELECT SUM(obligationAmount) FROM transactions WHERE nature = 'LIABILITY'")
     suspend fun getTotalLiabilities(): Double?
-
-
 }

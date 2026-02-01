@@ -16,6 +16,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.GravityCompat
@@ -24,7 +25,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.room.Room
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.appcompat.app.AppCompatDelegate
 import com.example.moneylog.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +38,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import android.os.Handler
+import android.os.Looper
+import android.widget.TextView
 
 class MainActivity : AppCompatActivity() {
 
@@ -54,7 +57,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
+        // Force Dark Mode for consistent UI
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
 
         super.onCreate(savedInstanceState)
@@ -77,6 +80,7 @@ class MainActivity : AppCompatActivity() {
         if (isSetupDone) {
             checkMonthlyCheckpoint()
             checkBackupReminder()
+            checkFeatureDiscovery()
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -193,7 +197,6 @@ class MainActivity : AppCompatActivity() {
 
         // 2. LONG CLICK -> Custom Tiny Popup (Bubble)
         binding.btnSend.setOnLongClickListener { anchor ->
-            // A. Build the layout programmatically
             val container = android.widget.LinearLayout(this).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 background = ContextCompat.getDrawable(context, R.drawable.bg_message_card)
@@ -201,7 +204,6 @@ class MainActivity : AppCompatActivity() {
                 elevation = 24f
             }
 
-            // B. Create the Popup Window
             val popup = android.widget.PopupWindow(
                 container,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -210,7 +212,6 @@ class MainActivity : AppCompatActivity() {
             )
             popup.elevation = 24f
 
-            // C. Helper to create the text rows
             fun createRow(text: String, colorRes: Int, nature: String) {
                 val tv = android.widget.TextView(this).apply {
                     this.text = text
@@ -225,11 +226,9 @@ class MainActivity : AppCompatActivity() {
                 container.addView(tv)
             }
 
-            // D. Add Options
             createRow("Asset", R.color.income_green, "ASSET")
             createRow("Liability", R.color.expense_red, "LIABILITY")
 
-            // E. Calculate Position (Force it ABOVE the button)
             container.measure(
                 android.view.View.MeasureSpec.UNSPECIFIED,
                 android.view.View.MeasureSpec.UNSPECIFIED
@@ -256,7 +255,6 @@ class MainActivity : AppCompatActivity() {
             resetInput()
         }
 
-        // FIX: Open Assets & Liabilities Screen
         binding.btnAssetsLiabilities.setOnClickListener {
             startActivity(Intent(this, AssetsLiabilitiesActivity::class.java))
         }
@@ -303,14 +301,13 @@ class MainActivity : AppCompatActivity() {
                     amount = amount,
                     description = desc
                 )
-                // Note: Nature update on edit is not implemented in this simplified flow
-                // to avoid complex reconciliation logic. Use Delete & Re-add if nature is wrong.
                 viewModel.updateTransaction(updated)
                 showError("Updated")
             }
 
             resetInput()
-            runSync(force = true)
+            // FIX: Removed force=true. Standard sync is sufficient as Repo queues the edit.
+            runSync(force = false)
 
         } else {
             showError("Please enter an amount (e.g., '50 Coffee')")
@@ -394,7 +391,7 @@ class MainActivity : AppCompatActivity() {
                         val desc = tokens[3]
                         var timestamp: Long = 0L
 
-                        if (tokens.size >= 7) { // Support new format with 7 columns
+                        if (tokens.size >= 7) {
                             if (tokens[6].toLongOrNull() != null) timestamp = tokens[6].toLong()
                         } else if (tokens.size >= 5 && tokens[4].toLongOrNull() != null) {
                             timestamp = tokens[4].toLong()
@@ -588,9 +585,7 @@ class MainActivity : AppCompatActivity() {
                     val prev = tokens[i - 1].toDouble()
                     val next = tokens[i + 1].toDouble()
 
-                    // --- FIX APPLIED HERE: DIV BY ZERO CHECK ---
                     if (op == "/" && next == 0.0) return null
-                    // -------------------------------------------
 
                     val res = if (op == "*") prev * next else prev / next
                     tokens[i - 1] = res.toString()
@@ -725,7 +720,6 @@ class MainActivity : AppCompatActivity() {
             fun fmt(d: Double): String = if (d % 1.0 == 0.0) d.toLong().toString() else d.toString()
 
             if (isCsv) {
-                // FIXED: Now includes Nature and Obligation
                 sb.append("Date,Time,Amount,Description,Nature,Obligation,Timestamp\n")
                 for (t in transactions) {
                     val date = Date(t.timestamp)
@@ -832,4 +826,63 @@ class MainActivity : AppCompatActivity() {
                 .setNegativeButton("Remind Later") { _, _ -> prefs.edit().putLong("last_backup_timestamp", now).apply() }.show()
         }
     }
+
+    // --- NEW: ONE-TIME FEATURE DISCOVERY HINT ---
+    private fun checkFeatureDiscovery() {
+        val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
+        val hasSeenHint = prefs.getBoolean("seen_long_press_hint", false)
+
+        if (!hasSeenHint) {
+            // Delay slightly to ensure UI is ready and user is looking
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    showDiscoveryBubble()
+                    prefs.edit().putBoolean("seen_long_press_hint", true).apply()
+                } catch (e: Exception) { e.printStackTrace() }
+            }, 1000)
+        }
+    }
+
+    private fun showDiscoveryBubble() {
+        // Reuse your Bubble styling
+        val context = this
+        val container = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            background = ContextCompat.getDrawable(context, R.drawable.bg_message_card)
+            setPadding(32, 24, 32, 24)
+            elevation = 24f
+        }
+
+        val text = TextView(context).apply {
+            text = "Tip: Long-press Send for Assets & Liabilities"
+            textSize = 14f
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        container.addView(text)
+
+        val popup = android.widget.PopupWindow(
+            container,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            true // Focusable so clicking outside dismisses it
+        )
+        popup.elevation = 24f
+
+        // Show it anchored to the Send button
+        // Calculate offset to show ABOVE the button
+        container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popupHeight = container.measuredHeight
+        val popupWidth = container.measuredWidth
+        val anchor = binding.btnSend
+        val xOff = -(popupWidth - anchor.width) / 2
+        val yOff = -(anchor.height + popupHeight + 16)
+
+        popup.showAsDropDown(anchor, xOff, yOff)
+
+        // Auto-dismiss after 5 seconds
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (popup.isShowing) popup.dismiss()
+        }, 5000)
+    }
+
 }

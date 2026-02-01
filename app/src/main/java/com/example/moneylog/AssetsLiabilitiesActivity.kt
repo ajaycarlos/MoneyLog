@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.moneylog.databinding.ActivityAssetsLiabilitiesBinding
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlin.math.abs
 
 class AssetsLiabilitiesActivity : AppCompatActivity() {
 
@@ -35,10 +36,13 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
 
         binding.rvList.layoutManager = LinearLayoutManager(this)
 
-        // FIX: Pass the actual click listener to handle Long-Press -> Delete
         adapter = TransactionAdapter(emptyList()) { transaction ->
             showActionDialog(transaction)
         }
+        // FIX: Disable signs for this screen (UX Polish)
+        // This ensures liabilities show as "500" (Red) instead of "- 500" (Red)
+        adapter.showSigns = false
+
         binding.rvList.adapter = adapter
 
         // Tab Switching Logic
@@ -85,9 +89,7 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
         viewModel.totalAssets.observe(this) { updateDisplay() }
         viewModel.totalLiabilities.observe(this) { updateDisplay() }
 
-        // FIX: Observe main transactions to auto-refresh this screen after a delete
-        // When 'deleteTransaction' is called, it refreshes 'transactions'.
-        // We catch that here and reload our specific asset/liability lists.
+        // Observe main transactions to auto-refresh this screen after a settlement/delete
         viewModel.transactions.observe(this) {
             viewModel.loadAssetsAndLiabilities()
         }
@@ -117,12 +119,11 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
 
             // Render Liabilities
             binding.tvTotalLabel.text = "TOTAL TO PAY"
-
-            // Use kotlin.math.abs() to remove the negative sign
-            binding.tvTotalValue.text = "$symbol ${fmt(kotlin.math.abs(total))}"
-
+            binding.tvTotalValue.text = "$symbol ${fmt(abs(total))}"
             binding.tvTotalValue.setTextColor(ContextCompat.getColor(this, R.color.expense_red))
 
+            // Pass negative obligationAmount so adapter colors it Red,
+            // but adapter.showSigns=false will hide the "-" text.
             val displayList = list.map { it.copy(amount = it.obligationAmount) }
             adapter.updateData(displayList)
 
@@ -130,22 +131,42 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Action Dialog to Settle/Delete
     private fun showActionDialog(transaction: Transaction) {
+        val options = arrayOf("Settle (Mark Paid)", "Delete (Correction)")
         MaterialAlertDialogBuilder(this)
-            .setTitle("Action")
-            .setItems(arrayOf("Settle / Delete")) { _, _ ->
-                confirmDelete(transaction)
+            .setTitle("Choose Action")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showSettleDialog(transaction)
+                    1 -> confirmDelete(transaction)
+                }
             }
+            .show()
+    }
+
+    private fun showSettleDialog(transaction: Transaction) {
+        val settleAmount = transaction.obligationAmount
+        val symbol = CurrencyHelper.getSymbol(this)
+
+        val displayAmount = "$symbol ${fmt(abs(settleAmount))}"
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Settle Transaction?")
+            .setMessage("Create a settlement record for $displayAmount?\n\nThis will zero out the balance while keeping the history.")
+            .setPositiveButton("Settle") { _, _ ->
+                val desc = "Settlement: ${transaction.description}"
+                val text = "${fmt(settleAmount)} $desc"
+                viewModel.addTransaction(text, settleAmount, desc, transaction.nature)
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
     private fun confirmDelete(transaction: Transaction) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Settle & Delete?")
-            .setMessage("Mark '${transaction.description}' as settled/removed?")
+            .setTitle("Delete Permanently?")
+            .setMessage("Remove '${transaction.description}' from records entirely?\n\nUse this only for mistakes.")
             .setPositiveButton("Delete") { _, _ ->
-                // This will trigger the observer setup above to reload the list
                 viewModel.deleteTransaction(transaction)
             }
             .setNegativeButton("Cancel", null)
