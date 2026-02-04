@@ -21,7 +21,6 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
     private val _totalBalance = MutableLiveData<Double>()
     val totalBalance: LiveData<Double> = _totalBalance
 
-    // NEW: Assets & Liabilities LiveData
     private val _assets = MutableLiveData<List<Transaction>>()
     val assets: LiveData<List<Transaction>> = _assets
 
@@ -35,14 +34,12 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
     val totalLiabilities: LiveData<Double> = _totalLiabilities
 
     init {
-        // Initialize DB with Migration Strategy
         val db = Room.databaseBuilder(application, AppDatabase::class.java, "moneylog-db")
             .addMigrations(AppDatabase.MIGRATION_1_2)
             .build()
         val syncManager = SyncManager(application, db)
         repository = TransactionRepository(db, syncManager)
 
-        // Initial Load
         refreshData()
     }
 
@@ -58,18 +55,9 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    // UPDATED: Added 'nature' parameter and Settlement Logic
     fun addTransaction(originalText: String, amount: Double, desc: String, nature: String) {
         viewModelScope.launch(Dispatchers.IO) {
-
-            // SETTLEMENT MATH:
-            // If Nature is Asset/Liability, the Obligation is the INVERSE of the cash flow.
-            // Example 1 (Lending): Cash -500. Obligation +500 (Owed to you).
-            // Example 2 (Repayment): Cash +200. Obligation -200 (Reduces what is owed).
-            val obligation = when (nature) {
-                "ASSET", "LIABILITY" -> -amount
-                else -> 0.0
-            }
+            val obligation = calculateObligation(amount, nature)
 
             val t = Transaction(
                 originalText = originalText,
@@ -81,6 +69,27 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
             )
             repository.insert(t)
             refreshData()
+        }
+    }
+
+    // FIX: Updated to verify math consistency
+    fun updateTransaction(transaction: Transaction) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Recalculate obligation in case the Amount OR Nature changed during the edit
+            val newObligation = calculateObligation(transaction.amount, transaction.nature)
+
+            val finalTransaction = transaction.copy(obligationAmount = newObligation)
+
+            repository.update(finalTransaction)
+            refreshData()
+        }
+    }
+
+    // Helper logic to keep Add/Edit consistent
+    private fun calculateObligation(amount: Double, nature: String): Double {
+        return when (nature) {
+            "ASSET", "LIABILITY" -> -amount
+            else -> 0.0
         }
     }
 
@@ -97,13 +106,6 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                 _totalAssets.value = assetTotal ?: 0.0
                 _totalLiabilities.value = liabilityTotal ?: 0.0
             }
-        }
-    }
-
-    fun updateTransaction(transaction: Transaction) {
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.update(transaction)
-            refreshData()
         }
     }
 

@@ -39,9 +39,12 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
         adapter = TransactionAdapter(emptyList()) { transaction ->
             showActionDialog(transaction)
         }
-        // FIX: Disable signs for this screen (UX Polish)
-        // This ensures liabilities show as "500" (Red) instead of "- 500" (Red)
+
+        // FIX 1: Disable signs (already done)
         adapter.showSigns = false
+
+        // FIX 2: Disable the vertical bar for this screen
+        adapter.showNatureIndicator = false
 
         binding.rvList.adapter = adapter
 
@@ -122,8 +125,7 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
             binding.tvTotalValue.text = "$symbol ${fmt(abs(total))}"
             binding.tvTotalValue.setTextColor(ContextCompat.getColor(this, R.color.expense_red))
 
-            // Pass negative obligationAmount so adapter colors it Red,
-            // but adapter.showSigns=false will hide the "-" text.
+            // Pass negative obligationAmount so adapter colors it Red
             val displayList = list.map { it.copy(amount = it.obligationAmount) }
             adapter.updateData(displayList)
 
@@ -164,9 +166,16 @@ class AssetsLiabilitiesActivity : AppCompatActivity() {
 
     private fun confirmDelete(transaction: Transaction) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete Permanently?")
-            .setMessage("Remove '${transaction.description}' from records entirely?\n\nUse this only for mistakes.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle("Remove Record")
+            .setMessage("How do you want to remove '${transaction.description}'?")
+            .setPositiveButton("Unmark Only") { _, _ ->
+                // Option 1: Just remove from Assets/Liabilities list (Keep in main history)
+                // We do this by changing nature back to "NORMAL"
+                val updated = transaction.copy(nature = "NORMAL")
+                viewModel.updateTransaction(updated)
+            }
+            .setNeutralButton("Delete Forever") { _, _ ->
+                // Option 2: Delete from database entirely
                 viewModel.deleteTransaction(transaction)
             }
             .setNegativeButton("Cancel", null)

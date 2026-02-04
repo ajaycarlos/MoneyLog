@@ -19,8 +19,11 @@ class TransactionAdapter(
     private val onDeleteClick: (Transaction) -> Unit
 ) : RecyclerView.Adapter<TransactionAdapter.TransactionViewHolder>() {
 
-    // Flag to toggle sign display (+/-) while keeping color logic
+    // Existing flag for signs
     var showSigns: Boolean = true
+
+    // NEW FLAG: To toggle the vertical bar (Default = true for Home Screen)
+    var showNatureIndicator: Boolean = true
 
     private val timeFormatter = SimpleDateFormat("h:mm a", Locale.getDefault())
     private val dateFullFormatter = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
@@ -59,11 +62,34 @@ class TransactionAdapter(
         holder.binding.tvAmount.text = displayAmount
 
         // 3. Color Logic
-        // FIX: Removed "Day Mode" check since we are strictly enforcing Dark Mode.
-        // We now always use the Muted colors which exist in your colors.xml.
         val colorRes = if (isIncome) R.color.income_muted else R.color.expense_muted
-
         holder.binding.tvAmount.setTextColor(ContextCompat.getColor(context, colorRes))
+
+        // --- NATURE INDICATOR BAR LOGIC ---
+        // Only show if the flag is TRUE AND it's an Asset/Liability
+        if (showNatureIndicator) {
+            when (item.nature) {
+                "ASSET" -> {
+                    holder.binding.viewNatureIndicator.visibility = View.VISIBLE
+                    holder.binding.viewNatureIndicator.setBackgroundColor(
+                        ContextCompat.getColor(context, R.color.income_muted)
+                    )
+                }
+                "LIABILITY" -> {
+                    holder.binding.viewNatureIndicator.visibility = View.VISIBLE
+                    holder.binding.viewNatureIndicator.setBackgroundColor(
+                        ContextCompat.getColor(context, R.color.expense_muted)
+                    )
+                }
+                else -> {
+                    holder.binding.viewNatureIndicator.visibility = View.GONE
+                }
+            }
+        } else {
+            // Force hide on specific screens (like Assets/Liabilities page)
+            holder.binding.viewNatureIndicator.visibility = View.GONE
+        }
+        // -----------------------------------
 
         // 4. Time
         holder.binding.tvTime.text = timeFormatter.format(Date(item.timestamp))

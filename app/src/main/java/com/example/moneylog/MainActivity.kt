@@ -299,14 +299,15 @@ class MainActivity : AppCompatActivity() {
                 val updated = current.copy(
                     originalText = finalRawText,
                     amount = amount,
-                    description = desc
+                    description = desc,
+                    nature = nature // Now applying the nature passed from the button click
                 )
                 viewModel.updateTransaction(updated)
                 showError("Updated")
             }
 
             resetInput()
-            // FIX: Removed force=true. Standard sync is sufficient as Repo queues the edit.
+            // Removed force=true. Standard sync is sufficient as Repo queues the edit.
             runSync(force = false)
 
         } else {
