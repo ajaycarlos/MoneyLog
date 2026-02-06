@@ -33,7 +33,7 @@ class FaqActivity : AppCompatActivity() {
         Faq("Where can I see my total debts and credits?", "Tap the Arrows Icon (⇄) at the top right of the home screen. This opens a dedicated page showing your total 'To Receive' (Assets) and 'To Pay' (Liabilities)."),
         Faq("How do I edit a mistake?", "Long-press any transaction bubble on the home screen. You can change the amount, the description, or even change its status between Normal, Asset, and Liability."),
         Faq("What is the difference between 'Delete' and 'Unmark'?", "Delete removes the record from the app entirely. Unmark removes it from your Assets/Liabilities ledger but keeps the transaction in your main history as a normal expense or income."),
-        Faq("Can I use math in the input bar?", "Yes! You can type full expressions like '(100/2)+50 Lunch'. JotPay will calculate the result and save it as a single transaction."),
+        Faq("Can I use math in the input bar?", "Yes! You can type full expressions like '100/2+50 Lunch'. JotPay will calculate the result and save it as a single transaction."),
         Faq("Is my data private and synced?", "Your data is stored locally. If you enable Cloud Sync, your data is protected with End-to-End Encryption. Only you (using your secret key) can read your synced data.")
     )
 

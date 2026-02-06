@@ -150,11 +150,20 @@
                 val finalTotal = total ?: 0.0
                 val symbol = CurrencyHelper.getSymbol(this)
 
+                // FIX: Determine if search is active to adjust UI
+                val isSearchActive = binding.etSearch.visibility == View.VISIBLE && binding.etSearch.text.isNotEmpty()
+
+                // FIX: If searching, show absolute value (Total Spend). If not, show actual balance.
+                val targetValue = if (isSearchActive) abs(finalTotal) else finalTotal
+
+                // FIX: Update label dynamically
+                binding.tvBalanceLabel.text = if (isSearchActive) "Total Found" else "Current Balance"
+
                 balanceAnimator?.cancel()
                 balanceAnimator = null
 
-                if (currentDisplayedBalance != finalTotal) {
-                    val animator = ValueAnimator.ofObject(DoubleEvaluator(), currentDisplayedBalance, finalTotal)
+                if (currentDisplayedBalance != targetValue) {
+                    val animator = ValueAnimator.ofObject(DoubleEvaluator(), currentDisplayedBalance, targetValue)
                     animator.duration = 500
                     animator.addUpdateListener { animation ->
                         val animatedValue = animation.animatedValue as Double
@@ -163,15 +172,15 @@
                     }
                     animator.addListener(object : android.animation.AnimatorListenerAdapter() {
                         override fun onAnimationEnd(animation: android.animation.Animator) {
-                            val formattedValue = if (finalTotal % 1.0 == 0.0) finalTotal.toLong().toString() else String.format("%.1f", finalTotal)
+                            val formattedValue = if (targetValue % 1.0 == 0.0) targetValue.toLong().toString() else String.format("%.1f", targetValue)
                             binding.tvTotalBalance.text = "$symbol $formattedValue"
                         }
                     })
                     animator.start()
                     balanceAnimator = animator
-                    currentDisplayedBalance = finalTotal
+                    currentDisplayedBalance = targetValue
                 } else {
-                    val formattedValue = if (finalTotal % 1.0 == 0.0) finalTotal.toLong().toString() else String.format("%.1f", finalTotal)
+                    val formattedValue = if (targetValue % 1.0 == 0.0) targetValue.toLong().toString() else String.format("%.1f", targetValue)
                     binding.tvTotalBalance.text = "$symbol $formattedValue"
                 }
                 binding.tvTotalBalance.setTextColor(android.graphics.Color.WHITE)
