@@ -49,8 +49,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             val serverSnapshot = ref.child("transactions").get().await()
             val deletedSnapshot = ref.child("deleted").get().await()
 
-            // FIX: Capture pending edits snapshot for the PUSH phase only
-            val pendingEditsSnapshot = syncManager.getPendingEdits()
+            // FIX: Capture pending edits SNAPSHOT (Map<Timestamp, Token>)
+            val pendingEditsMap = syncManager.getPendingEditsSnapshot()
 
             val serverDeletedIds = mutableSetOf<String>()
             for (child in deletedSnapshot.children) {
@@ -82,7 +82,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     jsonObject.put("oa", t.obligationAmount)
 
                     var shouldPush = true
-                    val isPendingEdit = pendingEditsSnapshot.contains(t.timestamp.toString())
+
+                    // Check if this item is pending edit using the Map
+                    val isPendingEdit = pendingEditsMap.containsKey(t.timestamp)
+                    val pendingToken = pendingEditsMap[t.timestamp]
 
                     // Compare with Server Data to decide if we need to Push
                     if (serverSnapshot.hasChild(stableId)) {
@@ -113,7 +116,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
                                 if (isExactMatch) {
                                     shouldPush = false // Data is identical, no push needed
-                                    if (isPendingEdit) syncManager.removePendingEdit(t.timestamp)
+                                    // FIX: Remove pending flag ONLY if token matches
+                                    if (isPendingEdit && pendingToken != null) {
+                                        syncManager.removePendingEdit(t.timestamp, pendingToken)
+                                    }
                                 } else {
                                     // Conflict: If local isn't pending edit, assume Server Wins (unless Force Push)
                                     if (!forcePush && !isPendingEdit) {
@@ -130,7 +136,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                         val encryptedData = EncryptionHelper.encrypt(jsonObject.toString(), secretKey)
                         ref.child("transactions").child(stableId).setValue(encryptedData)
                         pushedKeys.add(stableId)
-                        if (isPendingEdit) syncManager.removePendingEdit(t.timestamp)
+
+                        // FIX: Remove pending flag ONLY if token matches
+                        if (isPendingEdit && pendingToken != null) {
+                            syncManager.removePendingEdit(t.timestamp, pendingToken)
+                        }
                     }
                 }
             }
@@ -153,17 +163,17 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                         val desc = jsonObject.optString("d")
                         val timestamp = jsonObject.optLong("t")
 
-                        // FIX: EXTRACT VARIABLES SO THEY ARE NOT UNRESOLVED (Red Marks Fixed)
+                        // FIX: EXTRACT VARIABLES SO THEY ARE NOT UNRESOLVED
                         val nature = jsonObject.optString("n", "NORMAL")
                         val obligationAmount = jsonObject.optDouble("oa", 0.0)
 
                         // FIX: GET FRESH LISTS TO PREVENT OVERWRITING NEW LOCAL EDITS
-                        val freshPendingEdits = syncManager.getPendingEdits()
+                        // Check LIVE state, not the old snapshot
                         val freshPendingDeletes = syncManager.getPendingDeletes()
-
-                        // Check FRESH lists, not the old snapshots
                         if (freshPendingDeletes.contains(timestamp.toString())) continue
-                        if (freshPendingEdits.contains(timestamp.toString())) continue
+
+                        // FIX: Check LIVE pending edit state
+                        if (syncManager.hasPendingEdit(timestamp)) continue
 
                         val existing = db.transactionDao().getByTimestamp(timestamp)
 
@@ -174,7 +184,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                                 amount = amount,
                                 description = desc,
                                 timestamp = timestamp,
-                                nature = nature, // Now these variables exist!
+                                nature = nature,
                                 obligationAmount = obligationAmount
                             ))
                             changesCount++

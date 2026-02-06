@@ -50,22 +50,52 @@ class SyncManager(private val context: Context, private val db: AppDatabase) {
         prefs.edit().putStringSet("pending_deletes", pending).apply()
     }
 
-    // --- NEW: PENDING EDITS (The Fix) ---
+    // --- NEW: PENDING EDITS (Tokenized Fix) ---
     // Protects local edits from being overwritten by older server data
+    // Uses a "Timestamp:Token" format to handle race conditions
+
+    private fun getRawPendingEdits(): MutableSet<String> {
+        return prefs.getStringSet("pending_edits", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+    }
+
     fun queueEdit(timestamp: Long) {
-        val pending = getPendingEdits().toMutableSet()
-        pending.add(timestamp.toString())
+        val pending = getRawPendingEdits()
+        // Remove any old token for this timestamp
+        pending.removeAll { it.startsWith("$timestamp:") }
+
+        // Add new unique token
+        val token = UUID.randomUUID().toString().substring(0, 8)
+        pending.add("$timestamp:$token")
+
         prefs.edit().putStringSet("pending_edits", pending).apply()
     }
 
-    fun getPendingEdits(): MutableSet<String> {
-        return prefs.getStringSet("pending_edits", mutableSetOf()) ?: mutableSetOf()
+    // Returns a Map of Timestamp -> Token
+    fun getPendingEditsSnapshot(): Map<Long, String> {
+        val map = mutableMapOf<Long, String>()
+        getRawPendingEdits().forEach { entry ->
+            val parts = entry.split(":")
+            if (parts.size == 2) {
+                map[parts[0].toLong()] = parts[1]
+            }
+        }
+        return map
     }
 
-    fun removePendingEdit(timestamp: Long) {
-        val pending = getPendingEdits().toMutableSet()
-        pending.remove(timestamp.toString())
-        prefs.edit().putStringSet("pending_edits", pending).apply()
+    // Only remove if the token matches exactly.
+    // If the token changed (user edited again), we do NOT remove it.
+    fun removePendingEdit(timestamp: Long, token: String) {
+        val pending = getRawPendingEdits()
+        val entry = "$timestamp:$token"
+        if (pending.contains(entry)) {
+            pending.remove(entry)
+            prefs.edit().putStringSet("pending_edits", pending).apply()
+        }
+    }
+
+    // Helper for Step 3: Check if ANY pending edit exists for this timestamp
+    fun hasPendingEdit(timestamp: Long): Boolean {
+        return getRawPendingEdits().any { it.startsWith("$timestamp:") }
     }
 
     // --- HELPERS ---

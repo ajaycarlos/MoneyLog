@@ -215,7 +215,9 @@
 
             // 1. STANDARD CLICK -> Normal Transaction
             binding.btnSend.setOnClickListener {
-                handleInput(nature = "NORMAL")
+                // FIX: Preserve existing nature if editing, otherwise default to NORMAL
+                val targetNature = editingTransaction?.nature ?: "NORMAL"
+                handleInput(nature = targetNature)
             }
 
             // 2. LONG CLICK -> Custom Tiny Popup (Bubble)
@@ -416,10 +418,21 @@
                     reader.readLine() // Header
 
                     var line = reader.readLine()
-                    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+
+                    // FIX 3: Support multiple date formats & prevent "Current Time" corruption
+                    val dateFormats = listOf(
+                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()),
+                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()),
+                        SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault()),
+                        SimpleDateFormat("MM/dd/yyyy HH:mm", Locale.getDefault()),
+                        SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
+                    )
+
                     val usedTimestamps = HashSet<Long>()
+                    var skippedCount = 0
 
                     while (line != null) {
+                        // Regex handles CSVs with quoted strings containing commas
                         val tokens = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
                             .map { it.trim().removeSurrounding("\"").replace("\"\"", "\"") }
 
@@ -429,40 +442,61 @@
                             val desc = tokens[3]
                             var timestamp: Long = 0L
 
+                            // 1. Try explicit timestamp column first
                             if (tokens.size >= 7) {
-                                if (tokens[6].toLongOrNull() != null) timestamp = tokens[6].toLong()
-                            } else if (tokens.size >= 5 && tokens[4].toLongOrNull() != null) {
-                                timestamp = tokens[4].toLong()
+                                timestamp = tokens[6].toLongOrNull() ?: 0L
+                            } else if (tokens.size >= 5) {
+                                // Fallback for older CSV versions
+                                timestamp = tokens[4].toLongOrNull() ?: 0L
                             }
 
+                            // 2. If no timestamp, try parsing the date string
                             if (timestamp == 0L) {
-                                timestamp = try {
-                                    dateFormat.parse(dateStr)?.time
-                                } catch (e: Exception) {
-                                    System.currentTimeMillis()
-                                } ?: System.currentTimeMillis()
+                                for (fmt in dateFormats) {
+                                    try {
+                                        // Strict parsing to ensure accuracy
+                                        // fmt.isLenient = false // Optional: uncomment if strictness is required
+                                        val date = fmt.parse(dateStr)
+                                        if (date != null) {
+                                            timestamp = date.time
+                                            break
+                                        }
+                                    } catch (e: Exception) { }
+                                }
                             }
-                            while (usedTimestamps.contains(timestamp)) timestamp += 1
-                            usedTimestamps.add(timestamp)
 
-                            val nature = if (tokens.size >= 5) tokens[4] else "NORMAL"
-                            val obligation = if (tokens.size >= 6) tokens[5].toDoubleOrNull() ?: 0.0 else 0.0
+                            // FIX 3 (Critical): If date parsing failed, SKIP.
+                            // Do NOT default to System.currentTimeMillis(), as that corrupts history.
+                            if (timestamp == 0L) {
+                                skippedCount++
+                            } else {
+                                // Prevent collision
+                                while (usedTimestamps.contains(timestamp)) timestamp += 1
+                                usedTimestamps.add(timestamp)
 
-                            val fmtAmount = if (amount % 1.0 == 0.0) amount.toLong().toString() else amount.toString()
+                                val nature = if (tokens.size >= 5) tokens[4] else "NORMAL"
+                                val obligation = if (tokens.size >= 6) tokens[5].toDoubleOrNull() ?: 0.0 else 0.0
+                                val fmtAmount = if (amount % 1.0 == 0.0) amount.toLong().toString() else amount.toString()
 
-                            importList.add(Transaction(
-                                originalText = "$fmtAmount $desc",
-                                amount = amount,
-                                description = desc,
-                                timestamp = timestamp,
-                                nature = nature,
-                                obligationAmount = obligation
-                            ))
+                                importList.add(Transaction(
+                                    originalText = "$fmtAmount $desc",
+                                    amount = amount,
+                                    description = desc,
+                                    timestamp = timestamp,
+                                    nature = nature,
+                                    obligationAmount = obligation
+                                ))
+                            }
                         }
                         line = reader.readLine()
                     }
+
                     viewModel.importTransactionList(importList)
-                    withContext(Dispatchers.Main) { showError("Importing ${importList.size} items...") }
+
+                    withContext(Dispatchers.Main) {
+                        val msg = if (skippedCount > 0) "Imported ${importList.size}. Skipped $skippedCount invalid dates." else "Imported ${importList.size} items"
+                        showError(msg)
+                    }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) { showError("Import Failed: ${e.message}") }
                 }
