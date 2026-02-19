@@ -42,6 +42,13 @@
             import android.os.Handler
             import android.os.Looper
             import android.widget.TextView
+    import com.google.android.play.core.appupdate.AppUpdateManager
+    import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+    import com.google.android.play.core.install.InstallStateUpdatedListener
+    import com.google.android.play.core.install.model.AppUpdateType
+    import com.google.android.play.core.install.model.InstallStatus
+    import com.google.android.play.core.install.model.UpdateAvailability
+    import com.google.android.material.snackbar.Snackbar
 
     class MainActivity : AppCompatActivity() {
 
@@ -52,6 +59,14 @@
         private var pendingEditId: Long = 0L
         private var balanceAnimator: ValueAnimator? = null
         private var currentDisplayedBalance = 0.0
+        private lateinit var appUpdateManager: AppUpdateManager
+        private val updateListener = InstallStateUpdatedListener { state ->
+            if (state.installStatus() == InstallStatus.DOWNLOADED) {
+                // Once downloaded, show a message to the user to restart
+                showUpdateFinishedSnackbar()
+            }
+        }
+        private var isOnboardingShowing = false
 
         private val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             uri?.let { parseAndImportCsv(it) }
@@ -72,6 +87,9 @@
             setupRecyclerView()
             setupListeners()
             setupInputLogic()
+            appUpdateManager = AppUpdateManagerFactory.create(this)
+            appUpdateManager.registerListener(updateListener)
+
 
             val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
             val isSetupDone = prefs.getBoolean("policy_accepted", false) && CurrencyHelper.isCurrencySet(this)
@@ -82,6 +100,7 @@
                 checkMonthlyCheckpoint()
                 checkBackupReminder()
                 checkFeatureDiscovery()
+                checkForUpdates()
             }
 
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -108,11 +127,25 @@
         override fun onResume() {
             super.onResume()
             val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
-            if (!prefs.getBoolean("policy_accepted", false)) {
-                checkFirstLaunchFlow()
+            val policyAccepted = prefs.getBoolean("policy_accepted", false)
+            val currencySet = CurrencyHelper.isCurrencySet(this)
+
+            if (!policyAccepted) {
+                if (!isOnboardingShowing) checkFirstLaunchFlow()
+            } else if (!currencySet) {
+                if (!isOnboardingShowing) checkCurrencySetup()
             } else {
+                // Only refresh and check for updates IF setup is complete
                 viewModel.refreshData()
                 runSync()
+                checkForUpdates()
+            }
+
+            // Check for downloaded background updates
+            appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+                if (info.installStatus() == InstallStatus.DOWNLOADED) {
+                    showUpdateFinishedSnackbar()
+                }
             }
         }
 
@@ -586,7 +619,8 @@
                     val isTransactionStart = text.startsWith("+") || text.startsWith("-")
                     val hasSpace = text.contains(" ")
                     val typeText = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                    val typeNumeric = InputType.TYPE_CLASS_DATETIME
+// Use TYPE_CLASS_PHONE to allow digits, dots, and math operators while forcing numeric pad
+                    val typeNumeric = InputType.TYPE_CLASS_PHONE
                     val targetType = if (isTransactionStart && !hasSpace) typeNumeric else typeText
 
                     if (binding.etInput.inputType != targetType) {
@@ -830,8 +864,10 @@
         }
 
         private fun showPrivacyWelcomeDialog() {
+            isOnboardingShowing = true
             MaterialAlertDialogBuilder(this).setTitle("Welcome to JotPay").setMessage("Before you start tracking your finances, please accept our terms.\n\n• Your data is encrypted and stored locally.\n• Cloud Sync is optional and end-to-end encrypted.\n• We do not track you or sell your data.").setCancelable(false)
                 .setPositiveButton("Accept & Continue") { _, _ ->
+                    isOnboardingShowing = false
                     getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE).edit().putBoolean("policy_accepted", true).apply()
                     checkCurrencySetup()
                 }
@@ -876,9 +912,11 @@
         }
 
         private fun showCurrencySelector(isFirstLaunch: Boolean) {
+            isOnboardingShowing = true
             val currencies = CurrencyHelper.CURRENCIES
             MaterialAlertDialogBuilder(this).setTitle("Select Currency").setCancelable(!isFirstLaunch)
                 .setItems(currencies) { _, which ->
+                    isOnboardingShowing = false
                     CurrencyHelper.setCurrency(this, currencies[which])
                     viewModel.refreshData()
                     if(isFirstLaunch) checkMonthlyCheckpoint()
@@ -893,12 +931,36 @@
 
         private fun checkBackupReminder() {
             val prefs = getSharedPreferences("moneylog_prefs", Context.MODE_PRIVATE)
-            val lastReminded = prefs.getLong("last_backup_timestamp", 0L)
+
+            // 1. Check if user permanently disabled it
+            if (prefs.getBoolean("disable_backup_reminder", false)) return
+
+            // 2. Initialize timestamp to 'now' if it's the first time so we don't nag on day 1
+            val lastReminded = prefs.getLong("last_backup_timestamp", -1L)
+            if (lastReminded == -1L) {
+                prefs.edit().putLong("last_backup_timestamp", System.currentTimeMillis()).apply()
+                return
+            }
+
             val now = System.currentTimeMillis()
-            if (now - lastReminded > 604800000L) {
-                MaterialAlertDialogBuilder(this).setTitle("Backup Reminder").setMessage("It's been a while since your last backup.\n\nTo prevent data loss, we recommend exporting your data to Google Drive or keeping a CSV copy safe.")
+            val sevenDays = 604800000L
+
+            if (now - lastReminded > sevenDays) {
+                // 3. Only remind if they actually have transactions to back up
+                val transactions = viewModel.transactions.value ?: emptyList()
+                if (transactions.isEmpty()) return
+
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Backup Reminder")
+                    .setMessage("It's been a while since your last backup. To prevent data loss, we recommend exporting your data.")
                     .setPositiveButton("Export Now") { _, _ -> showExportDialog() }
-                    .setNegativeButton("Remind Later") { _, _ -> prefs.edit().putLong("last_backup_timestamp", now).apply() }.show()
+                    .setNeutralButton("Never Remind Me") { _, _ ->
+                        prefs.edit().putBoolean("disable_backup_reminder", true).apply()
+                    }
+                    .setNegativeButton("Remind Later") { _, _ ->
+                        prefs.edit().putLong("last_backup_timestamp", now).apply()
+                    }
+                    .show()
             }
         }
 
@@ -965,6 +1027,37 @@
             val activeNetwork = connectivityManager.activeNetwork ?: return false
             val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
             return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }
+
+        private fun checkForUpdates() {
+            val appUpdateInfoTask = appUpdateManager.appUpdateInfo
+            appUpdateInfoTask.addOnSuccessListener { info ->
+                if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                    && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)
+                ) {
+                    // This shows the official Play Store "Update Available" dialog
+                    // but with a "Download in background" option
+                    appUpdateManager.startUpdateFlowForResult(info, AppUpdateType.FLEXIBLE, this, 9001)
+                }
+            }
+        }
+
+        private fun showUpdateFinishedSnackbar() {
+            Snackbar.make(
+                binding.root,
+                "Update downloaded. Restart to install.",
+                Snackbar.LENGTH_INDEFINITE
+            ).apply {
+                setAction("RESTART") { appUpdateManager.completeUpdate() }
+                setActionTextColor(ContextCompat.getColor(context, R.color.income_green))
+                show()
+            }
+        }
+
+        override fun onDestroy() {
+            // Always unregister listeners to prevent memory leaks
+            appUpdateManager.unregisterListener(updateListener)
+            super.onDestroy()
         }
 
     }

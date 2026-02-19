@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "976724538310",
+    "firebase_url": "https://jotpay-e86c5-default-rtdb.firebaseio.com",
     "project_id": "jotpay-e86c5",
     "storage_bucket": "jotpay-e86c5.firebasestorage.app"
   },
@@ -16,6 +17,31 @@
       "api_key": [
         {
           "current_key": "AIzaSyAlaOLLlXaQ6qpxofMcVmJxvyE25VBAlxM"
+        },
+        {
+          "current_key": "AIzaSyC2rU9o1xx7MKlCeuRqa1zlI1BNGm46seI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:976724538310:android:4471bdb42dc18e55af78c7",
+        "android_client_info": {
+          "package_name": "com.ajaydev.jotpay.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlaOLLlXaQ6qpxofMcVmJxvyE25VBAlxM"
+        },
+        {
+          "current_key": "AIzaSyC2rU9o1xx7MKlCeuRqa1zlI1BNGm46seI"
         }
       ],
       "services": {
