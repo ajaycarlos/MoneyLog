@@ -24,6 +24,11 @@
             import java.util.UUID
     import androidx.core.view.ViewCompat
     import androidx.core.view.WindowInsetsCompat
+    import androidx.lifecycle.lifecycleScope
+    import kotlinx.coroutines.Dispatchers
+    import kotlinx.coroutines.launch
+    import kotlinx.coroutines.withContext
+    import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
     class LinkDeviceActivity : AppCompatActivity() {
 
@@ -52,7 +57,7 @@
                 insets
             }
 
-            val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "moneylog-db").build()
+            db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "moneylog-db").build()
             syncManager = SyncManager(this, db) //SyncManager
 
             binding.btnBack.setOnClickListener {
@@ -233,24 +238,34 @@
                         }
 
 
-                        val prefs = getSharedPreferences("jotpay_sync", Context.MODE_PRIVATE)
-                        prefs.edit()
-                            .putString("vault_id", scannedVault)
-                            .putString("secret_key", scannedKey)
-                            .apply()
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val existingTransactions = db.transactionDao().getAll()
 
-                        // Important: Reset the currentVaultId variable so registerDevice uses the NEW one
-                        currentVaultId = scannedVault
-
-                        if (isOnline()) {
-                            Toast.makeText(this, "Device Linked Successfully", Toast.LENGTH_LONG).show()
-                            // Register this device to the NEW vault
-                            registerDeviceOnServer(scannedVault)
-                        } else {
-                            Toast.makeText(this, "Linked (Offline). Sync pending.", Toast.LENGTH_LONG).show()
+                            withContext(Dispatchers.Main) {
+                                if (existingTransactions.isEmpty()) {
+                                    // Log is empty, link immediately
+                                    applyNewVaultAndFinish(scannedVault, scannedKey)
+                                } else {
+                                    // Log is not empty, show Merge/Overwrite dialog
+                                    MaterialAlertDialogBuilder(this@LinkDeviceActivity)
+                                        .setTitle("Link Device")
+                                        .setMessage("You already have logs on this device.\nDo you want to merge them with the new linked device or replace them entirely?")
+                                        .setPositiveButton("Merge") { _, _ ->
+                                            applyNewVaultAndFinish(scannedVault, scannedKey)
+                                        }
+                                        .setNeutralButton("Overwrite") { _, _ ->
+                                            lifecycleScope.launch(Dispatchers.IO) {
+                                                db.transactionDao().deleteAll() // Clear local DB first
+                                                withContext(Dispatchers.Main) {
+                                                    applyNewVaultAndFinish(scannedVault, scannedKey)
+                                                }
+                                            }
+                                        }
+                                        .setNegativeButton("Cancel", null)
+                                        .show()
+                                }
+                            }
                         }
-
-                        finish()
 
                     } catch (e: Exception) {
                         Toast.makeText(this, "Invalid QR Code", Toast.LENGTH_SHORT).show()
@@ -260,4 +275,27 @@
                 super.onActivityResult(requestCode, resultCode, data)
             }
         }
+
+        private fun applyNewVaultAndFinish(scannedVault: String, scannedKey: String) {
+            val prefs = getSharedPreferences("jotpay_sync", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("vault_id", scannedVault)
+                .putString("secret_key", scannedKey)
+                .apply()
+
+            currentVaultId = scannedVault
+
+            if (isOnline()) {
+                Toast.makeText(this, "Device Linked Successfully", Toast.LENGTH_LONG).show()
+                registerDeviceOnServer(scannedVault)
+
+                syncManager.scheduleSync(forcePush = true)
+
+            } else {
+                Toast.makeText(this, "Linked (Offline). Sync pending.", Toast.LENGTH_LONG).show()
+            }
+
+            finish()
+        }
+
     }

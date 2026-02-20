@@ -134,8 +134,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
                     if (shouldPush) {
                         val encryptedData = EncryptionHelper.encrypt(jsonObject.toString(), secretKey)
-                        ref.child("transactions").child(stableId).setValue(encryptedData)
+                        // Add .await() so WorkManager doesn't kill the process before Firebase finishes!
+                        ref.child("transactions").child(stableId).setValue(encryptedData).await()
                         pushedKeys.add(stableId)
+
+                        // FIX: Remove pending flag ONLY if token matches
 
                         // FIX: Remove pending flag ONLY if token matches
                         if (isPendingEdit && pendingToken != null) {
